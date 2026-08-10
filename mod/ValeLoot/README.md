@@ -113,7 +113,7 @@ starts with ValeLoot installed.
 Unzip, launch, press F8. There are two downloads and the first one is almost certainly the one you
 want:
 
-### `ValeLoot-0.1.0-with-BepInEx.zip` — take this one
+### `ValeLoot-0.3.1-with-BepInEx.zip` — take this one
 
 1. Unzip it into your SpiritVale folder — the folder holding `SpiritVale.exe`.
 2. Start the game. **The first start takes a few minutes** — see below.
@@ -140,7 +140,7 @@ BepInEx is included **unmodified**, under its own LGPL-2.1 licence. Its licence 
 source are in `NOTICE.txt` at the root of the zip, alongside `BepInEx-LICENSE.txt`. ValeLoot's own
 licence is at the bottom of this file and covers only ValeLoot.
 
-### `ValeLoot-0.1.0.zip` — the plugin on its own
+### `ValeLoot-0.3.1.zip` — the plugin on its own
 
 For someone who already runs BepInEx 6 IL2CPP (the *bleeding-edge* `be` build). It contains the DLL
 and this README and nothing else. Unzip it into the same game folder — the paths inside are already
@@ -169,6 +169,8 @@ The log is `BepInEx/LogOutput.log` in your game folder. A healthy boot looks lik
 [Info   :  ValeLoot] census ok  StatData.Value (substat roll %)
 [Info   :  ValeLoot] census ok  App.ServerRuntime (the game's own config database)
 [Info   :  ValeLoot] census ok  Formula.GetSubstatRange (the base cap behind a roll)
+[Info   :  ValeLoot] census ok  GameServerRuntime.ArtifactSets (id -> ArtifactSetConfig)
+[Info   :  ValeLoot] census ok  Formula.GetArtifactSubstatConfig (artifact substat pool)
 [Info   :  ValeLoot] census ok  PlayerSave.Update (editor tick)
 [Info   :  ValeLoot] census ok  PlayerSave.<Data> (your live character) (offset 0x160)
 [Info   :  ValeLoot] census ok  CharacterData.<Inventory> (the bag behind it) (offset 0xf0)
@@ -177,7 +179,7 @@ The log is `BepInEx/LogOutput.log` in your game folder. A healthy boot looks lik
 [Info   :  ValeLoot] census ok  Input.GetKeyDown(KeyCode) (the editor hotkey)
 [Info   :  ValeLoot] census ok  KeyCode members (322)
 [Info   :  ValeLoot] item reader ready (Data 0x70, Name 0x28, Type 0x38, 24 stat names, rolls readable)
-[Info   :  ValeLoot] item catalog bound, waiting for the client to load configs (App.ServerRuntime 0x18, Equips 0x20, Cards 0x28, Gems 0x30, Consumables 0x38, Junks 0x10, ...)
+[Info   :  ValeLoot] item catalog bound, waiting for the client to load configs (App.ServerRuntime 0x18, Equips 0x20, Artifacts 0x48, Cards 0x28, Gems 0x30, Consumables 0x38, Junks 0x10, ...)
 [Info   :  ValeLoot] inventory paint ready: 1 RenderPage + 1 Redraw body/bodies hooked
 [Info   :  ValeLoot] tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x70, UID 0x20, floor 400 chars)
 [Info   :  ValeLoot] pickup watch ready (PlayerSave.Data 0x160, CharacterData.Inventory 0xf0, InventoryData.Equips 0x10, InventoryData.Artifacts 0x18, InventoryData.Cards 0x20, InventoryData.Gems 0x28, InventoryData.Consumables 0x38, InventoryData.Cosmetics 0x40, InventoryData.Junks 0x30, CharacterData.UID 0x20) — loot sounds fire when an item lands in your bag, open or closed, checked 4x a second off the frame tick.
@@ -188,8 +190,8 @@ The log is `BepInEx/LogOutput.log` in your game folder. A healthy boot looks lik
 and then, once you are logged in and the game has loaded its data:
 
 ```
-[Info   :  ValeLoot] catalog ready: 647 equips, 327 cards, 129 gems, 31 consumables, 280 junk
-[Info   :  ValeLoot] wrote valeloot-items.txt (1414 items) to ...\BepInEx\config\valeloot-items.txt
+[Info   :  ValeLoot] catalog ready: 647 equips, 45 artifacts, 327 cards, 129 gems, 31 consumables, 280 junk
+[Info   :  ValeLoot] wrote valeloot-items.txt (1448 items) to ...\BepInEx\config\valeloot-items.txt
 ```
 
 and, once you are in the world:
@@ -353,6 +355,42 @@ as satisfied: that would widen the rule to your whole bag.
 
 `Threshold 90` sets the raw-roll cutoff for `HighRolls`. It affects `HighRolls` and nothing else —
 not `TopRolls`, `Stat`, or `AvgRollPct`.
+
+### Roll and artifact examples
+
+`TopRolls` counts lines whose displayed value reaches the legal maximum. `HighRolls` counts hidden
+raw rolls at or above `Threshold`. Use the one that matches the question you actually mean:
+
+```text
+# Three lines show the maximum value legal for this artifact.
+Show "Perfect artifact"
+    Type      Artifact
+    TopRolls  >= 3
+    Color     #f4d35e
+    Tag       ART3
+    Highlight glow
+    Sound     chime
+
+# Both printed-value conditions must hold. Sound fires when the artifact enters the bag.
+Show "VIT + HP artifact"
+    Type      Artifact
+    Stat      Vit >= 3
+    Stat      Hp >= 2
+    Color     #7dd3fc
+    Highlight mark
+    Sound     ding
+
+# Two hidden raw rolls landed in the top tenth of their ranges.
+Threshold 90
+Show "Two lucky raw rolls"
+    HighRolls >= 2
+    Color     #c4a5ff
+    Highlight glow
+```
+
+**Upgrading from 0.3.0 or earlier:** rename an old `TopRolls` condition to `HighRolls` when it was
+intended to use `Threshold`. Keep `TopRolls` when the intended rule is “the tooltip shows the
+maximum.” `AvgRoll` remains accepted as an alias for `AvgRollPct`.
 
 `SharedStats` and `Verdict` are refused with a message: they ask about the gear you are wearing,
 which this build does not read. `Unknown` and `Known` are refused too — they ask whether a reference

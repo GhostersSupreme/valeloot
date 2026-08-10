@@ -10,11 +10,11 @@
     <!--
       Drives both the assembly version and the name of the shipped zip.
 
-      Bumped when the code diverges from the last release, NOT when a release is cut. A tree that
-      still says 0.1.0 after 0.1.0 shipped builds `dist/ValeLoot-0.1.0.zip` with different bytes
-      from the one on the releases page, and nothing anywhere would notice.
+      Bumped when the code diverges from the last release, NOT when a release is cut. Otherwise a
+      changed tree can build a zip with the same filename as the published release, and nothing
+      anywhere would notice that the bytes differ.
     -->
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <!-- BepInEx BE packages are prerelease by definition. -->
     <NoWarn>$(NoWarn);NU5104</NoWarn>
     <!--

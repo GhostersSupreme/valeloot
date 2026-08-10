@@ -6,7 +6,7 @@ when a matching item is picked up.
 
 It is complete on its own. No companion app, no server, no account, nothing to sign up for.
 
-> ### ⬇ [Download ValeLoot 0.3.0](https://github.com/bjb2/valeloot/releases/download/v0.3.0/ValeLoot-0.3.0-with-BepInEx.zip)
+> ### ⬇ [Download ValeLoot 0.3.1](https://github.com/bjb2/valeloot/releases/download/v0.3.1/ValeLoot-0.3.1-with-BepInEx.zip)
 >
 > Unzip it into your SpiritVale folder, launch the game, press **F8**.
 >
@@ -167,6 +167,43 @@ Hide "vendor trash"
 already prints two thirds of the maximum, so on an attribute that caps at 3, `>= 3` means maxed while
 `>= 90%` means genuinely lucky.
 
+### Roll and artifact examples
+
+`TopRolls` now means **displayed maximum**, while `HighRolls` means **raw roll at the configured
+threshold**. These deliberately answer different questions:
+
+```text
+# Three lines show the highest value legal for this artifact.
+Show "Perfect artifact"
+    Type      Artifact
+    TopRolls  >= 3
+    Color     #f4d35e
+    Tag       ART3
+    Highlight glow
+    Sound     chime
+
+# Exact values printed on two artifact lines. Both conditions must match.
+Show "VIT + HP artifact"
+    Type      Artifact
+    Stat      Vit >= 3
+    Stat      Hp >= 2
+    Color     #7dd3fc
+    Highlight mark
+    Sound     ding
+
+# Two hidden raw rolls landed in the top tenth of their ranges.
+Threshold 90
+Show "Two lucky raw rolls"
+    HighRolls >= 2
+    Color     #c4a5ff
+    Highlight glow
+```
+
+**Upgrading from 0.3.0 or earlier:** old `TopRolls` rules used the raw `Threshold` cutoff. Rename
+those conditions to `HighRolls` to preserve that behavior. Keep `TopRolls` when the intended rule is
+“the tooltip shows the maximum.” `AvgRoll` remains valid, but `AvgRollPct` is the clearer spelling
+written by the editor.
+
 **`StatMatches` lets a rule require some of its listed stats instead of all of them.** Normally,
 multiple `Stat` lines must all match. `AnyStat` changes that to at least one. `StatMatches` instead
 counts successful `Stat` conditions, so this rule requires any four of the six listed stats:
@@ -286,7 +323,8 @@ with any pack you download; that is between you and whoever made it.
   looks short, open your bag and scroll once.
 - **`Stat Agi >= 3` needs a second after you log in.** If a rule like that looks wrong the moment you get
   in, reopen your bag. `Stat Agi >= 90%` never has this problem.
-- **Artifacts have no `Type`.** Match them on rolls, refine or name instead.
+- **Artifacts use `Type Artifact`.** They can also match `Stat`, `TopRolls`, `HighRolls`,
+  `AvgRollPct`, `OverRoll`, `Refine`, `Name` and `Favorite`, just like the corresponding item facts.
 - **Ten items at once make one noise**, not ten. A rule with no conditions claims your whole bag and will
   chime at everything — that is the one way to turn this into a metronome, and it is your own doing.
 - **The console spamming `Spawned NetworkObject was expected to exist` is the game, not ValeLoot.**
