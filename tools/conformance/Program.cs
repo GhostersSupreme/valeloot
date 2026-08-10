@@ -16,10 +16,10 @@ namespace ValeLoot;
  * ## What `ItemCatalog` is doing here
  *
  * `LootFilter.Matches` consults the catalog to answer `Type` and `Stat <name> >= <value>` against a
- * live game. Nothing in a PARSE touches it, but the file will not compile without the symbol, and
- * linking the real one would drag in il2cpp and BepInEx — the whole reason this harness links three
- * files instead of referencing the plugin. So it is stubbed to the four members the parser and the
- * evaluator name, and it is never called: this corpus compares PARSES, not matches.
+ * live game. Parsing and the percentage-based StatMatches contract checks below do not need it, but
+ * the file will not compile without the symbol, and linking the real one would drag in il2cpp and
+ * BepInEx — the whole reason this harness links three files instead of referencing the plugin.
+ * Printed-value matching remains outside this harness, so the catalog methods stay inert.
  */
 internal static class ItemCatalog
 {
@@ -52,6 +52,8 @@ internal static class Program
             return 2;
         }
 
+        VerifyStatMatches();
+
         string[] files = Directory.GetFiles(directory, "*.txt");
         Array.Sort(files, StringComparer.Ordinal);
 
@@ -66,6 +68,49 @@ internal static class Program
 
         Console.Out.Write(json.ToString());
         return 0;
+    }
+
+    /// <summary>Executable contract for the count aggregation added by StatMatches.</summary>
+    private static void VerifyStatMatches()
+    {
+        var item = new LootFilter.ItemFacts();
+        item.AddStat("Str", 0, 80, "");
+        item.AddStat("Vit", 0, 60, "");
+
+        var stats = new[]
+        {
+            new LootFilter.StatCondition { Stat = "Str", MinRollPct = 70 },
+            new LootFilter.StatCondition { Stat = "Vit", MinRollPct = 50 },
+            new LootFilter.StatCondition { Stat = "Agi", MinRollPct = 50 },
+        };
+
+        AssertMatch(true, item, stats, 2, null, "at least two of three");
+        AssertMatch(false, item, stats, 3, null, "at least three of three");
+        AssertMatch(false, item, stats, null, 1, "at most one of three");
+        AssertMatch(true, item, stats, 2, 2, "exactly two of three");
+        AssertMatch(false, item, stats, 1, 1, "exactly one of three");
+    }
+
+    private static void AssertMatch(
+        bool expected,
+        LootFilter.ItemFacts item,
+        LootFilter.StatCondition[] stats,
+        int? min,
+        int? max,
+        string scenario)
+    {
+        var when = new LootFilter.LootCondition
+        {
+            Stats = stats,
+            MinStatMatches = min,
+            MaxStatMatches = max,
+        };
+        bool actual = LootFilter.Matches(item, when, LootFilter.DefaultThreshold);
+        if (actual != expected)
+        {
+            throw new InvalidOperationException(
+                $"StatMatches contract failed for {scenario}: expected {expected}, got {actual}");
+        }
     }
 
     private static void Emit(StringBuilder json, string name, string text)
@@ -124,6 +169,8 @@ internal static class Program
             .Append(", \"maxTopRolls\": ").Append(Int(when.MaxTopRolls))
             .Append(", \"minAvgRoll\": ").Append(Int(when.MinAvgRoll))
             .Append(", \"maxAvgRoll\": ").Append(Int(when.MaxAvgRoll))
+            .Append(", \"minStatMatches\": ").Append(Int(when.MinStatMatches))
+            .Append(", \"maxStatMatches\": ").Append(Int(when.MaxStatMatches))
             .Append(", \"statsAll\": ").Append(when.StatsAll ? "true" : "false")
             .Append(", \"hasChaos\": ").Append(Bool(when.HasChaos))
             .Append(", \"favorite\": ").Append(Bool(when.Favorite))

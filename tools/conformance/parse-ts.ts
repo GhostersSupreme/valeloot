@@ -55,6 +55,8 @@ function rule(r: LootRule): string {
     `, "maxTopRolls": ${num(w.maxTopRolls)}` +
     `, "minAvgRoll": ${num(w.minAvgRoll)}` +
     `, "maxAvgRoll": ${num(w.maxAvgRoll)}` +
+    `, "minStatMatches": ${num(w.minStatMatches)}` +
+    `, "maxStatMatches": ${num(w.maxStatMatches)}` +
     // `statMode: 'any' | 'all'` here, a `StatsAll` boolean there. Absent means all, on both sides.
     `, "statsAll": ${w.statMode !== 'any'}` +
     `, "hasChaos": ${bool(w.hasChaos)}` +

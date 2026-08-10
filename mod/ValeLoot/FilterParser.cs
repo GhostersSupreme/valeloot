@@ -285,6 +285,9 @@ internal static class FilterParser
         string label = "";
         int level = 0;
         string? sound = null;
+        bool statModeExplicit = false;
+        int? statMatchesLine = null;
+        string statMatchesText = "";
 
         foreach ((int line, string text) in block.Body)
         {
@@ -342,8 +345,70 @@ internal static class FilterParser
                     break;
                 }
 
-                case "anystat": when.StatsAll = false; break;
-                case "allstats": when.StatsAll = true; break;
+                case "anystat":
+                    if (statMatchesLine is not null)
+                    {
+                        errors.Add(new FilterError(
+                            line,
+                            text,
+                            "AnyStat cannot be combined with StatMatches — StatMatches already defines how listed Stat lines are aggregated"));
+                    }
+                    else
+                    {
+                        when.StatsAll = false;
+                        statModeExplicit = true;
+                    }
+                    break;
+
+                case "allstats":
+                    if (statMatchesLine is not null)
+                    {
+                        errors.Add(new FilterError(
+                            line,
+                            text,
+                            "AllStats cannot be combined with StatMatches — StatMatches already defines how listed Stat lines are aggregated"));
+                    }
+                    else
+                    {
+                        when.StatsAll = true;
+                        statModeExplicit = true;
+                    }
+                    break;
+
+                case "statmatches":
+                {
+                    if (statModeExplicit)
+                    {
+                        errors.Add(new FilterError(
+                            line,
+                            text,
+                            "StatMatches cannot be combined with AnyStat or AllStats"));
+                        break;
+                    }
+
+                    if (!Bound(remainder, out int? min, out int? max))
+                    {
+                        errors.Add(new FilterError(
+                            line,
+                            text,
+                            $"StatMatches needs a comparison like \">= 3\", got \"{remainder}\""));
+                        break;
+                    }
+
+                    if (min is int minimum)
+                    {
+                        when.MinStatMatches = minimum;
+                    }
+
+                    if (max is int maximum)
+                    {
+                        when.MaxStatMatches = maximum;
+                    }
+
+                    statMatchesLine = line;
+                    statMatchesText = text;
+                    break;
+                }
 
                 case "toprolls":
                 {
@@ -468,6 +533,40 @@ internal static class FilterParser
         }
 
         if (stats.Count > 0) when.Stats = stats.ToArray();
+
+        if (statMatchesLine is int boundsLine && stats.Count > 0)
+        {
+            int? min = when.MinStatMatches;
+            int? max = when.MaxStatMatches;
+            string? message = null;
+
+            if ((min is int minimum && minimum < 0) ||
+                (max is int maximum && maximum < 0))
+            {
+                message = "StatMatches cannot be negative";
+            }
+            else if (min is int lower && max is int upper && lower > upper)
+            {
+                message = $"StatMatches minimum {lower} cannot exceed maximum {upper}";
+            }
+            else if (min is int required && required > stats.Count)
+            {
+                message = $"StatMatches cannot require {required} matches from only {stats.Count} Stat line(s)";
+            }
+
+            if (message is not null)
+            {
+                errors.Add(new FilterError(boundsLine, statMatchesText, message));
+            }
+        }
+
+        if (statMatchesLine is int matchesLine && stats.Count == 0)
+        {
+            errors.Add(new FilterError(
+                matchesLine,
+                statMatchesText,
+                "StatMatches requires at least one Stat line in the same block"));
+        }
 
         /**
          * A `Hide` block with NO conditions claims every item in the bag and lights nothing — the whole

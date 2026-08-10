@@ -154,6 +154,7 @@ Hide "vendor trash"
 | `AvgRoll < 35` | average roll quality across its lines, in percent |
 | `Stat Agi >= 90%` | that stat's line rolled in the top tenth of its range |
 | `Stat Agi >= 3` | that stat *prints* at least 3 on this item |
+| `StatMatches >= 3` | at least this many of the listed `Stat` conditions must match |
 | `OverRoll` | a line above its normal maximum — only a Chaos widen does that |
 | `Refine >= 5` | refine level at least this |
 | `Favorite` | the star you put on it in game |
@@ -163,6 +164,27 @@ Hide "vendor trash"
 `Stat Agi >= 3` asks what it *prints*. They are different questions with different answers: a 0% roll
 already prints two thirds of the maximum, so on an attribute that caps at 3, `>= 3` means maxed while
 `>= 90%` means genuinely lucky.
+
+**`StatMatches` lets a rule require some of its listed stats instead of all of them.** Normally,
+multiple `Stat` lines must all match. `AnyStat` changes that to at least one. `StatMatches` instead
+counts successful `Stat` conditions, so this rule requires any four of the six listed stats:
+
+```text
+Show "Magic four-of-six"
+    Stat      MatkMult >= 5
+    Stat      Matk >= 5
+    Stat      DamageMagic >= 5
+    Stat      CastSpd >= 10
+    Stat      CooldownRecovery >= 10
+    Stat      CastRange >= 1
+    StatMatches >= 4
+```
+
+`StatMatches` supports `>=`, `>`, `=`, `<=`, and `<`. It cannot be combined with `AnyStat` or
+`AllStats`, because all three specify how the listed `Stat` lines are combined.
+Counts are non-negative. A minimum cannot exceed the number of listed `Stat` lines, and when two
+`StatMatches` lines form a range, the minimum cannot exceed the maximum. Invalid blocks are rejected
+instead of becoming rules that can never match.
 
 You never have to guess a spelling. ValeLoot writes every item and stat name the game knows to
 `valeloot-items.txt`, and refreshes it when the game gets new content.

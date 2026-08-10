@@ -340,6 +340,7 @@ Conditions (all optional, and all must hold for the block to match):
                             the kinds the game gives no type enum; ValeLoot names them
     Stat Agi >= 90%         that substat line rolled in the top 10% of its range
     Stat Agi >= 3           that substat PRINTS at least +3 on this item
+    StatMatches >= 3        at least three of the listed Stat conditions must match
     AnyStat                 one Stat line is enough (default: every Stat line must match)
     TopRolls >= 3           at least three lines at or above Threshold
     AvgRoll < 35            mean roll across the item's lines, as a whole percent

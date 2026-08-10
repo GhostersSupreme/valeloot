@@ -174,7 +174,18 @@ internal static class LootFilter
         public int? MinAvgRoll;
         public int? MaxAvgRoll;
         public StatCondition[]? Stats;
-        /// <summary>Every listed stat must match, rather than just one. `AnyStat` flips it.</summary>
+
+        /// <summary>
+        /// Minimum/maximum number of listed Stat conditions that must match.
+        /// When either bound is present, it replaces the normal AllStats/AnyStat behavior.
+        /// </summary>
+        public int? MinStatMatches;
+        public int? MaxStatMatches;
+
+        /// <summary>
+        /// Every listed stat must match, rather than just one. `AnyStat` flips it.
+        /// Ignored when a StatMatches bound is present.
+        /// </summary>
         public bool StatsAll = true;
         public bool? HasChaos;
         public bool? Favorite;
@@ -185,6 +196,7 @@ internal static class LootFilter
             Types is null && Names is null && MinRefine is null
             && MinTopRolls is null && MaxTopRolls is null && MinAvgRoll is null && MaxAvgRoll is null
             && (Stats is null || Stats.Length == 0)
+            && MinStatMatches is null && MaxStatMatches is null
             && HasChaos is null && Favorite is null && OverRoll is null;
     }
 
@@ -349,15 +361,48 @@ internal static class LootFilter
             if (when.MaxAvgRoll is int maxAvg && average > maxAvg) return false;
         }
 
+        bool boundedStatMatches =
+            when.MinStatMatches is not null ||
+            when.MaxStatMatches is not null;
+
         if (when.Stats is not null && when.Stats.Length > 0)
         {
             int hits = 0;
+
             for (int i = 0; i < when.Stats.Length; i++)
             {
-                if (MatchesStat(item, when.Stats[i])) hits++;
-                else if (when.StatsAll) return false;
+                if (MatchesStat(item, when.Stats[i]))
+                {
+                    hits++;
+                }
+                else if (!boundedStatMatches && when.StatsAll)
+                {
+                    return false;
+                }
             }
-            if (!when.StatsAll && hits == 0) return false;
+
+            if (boundedStatMatches)
+            {
+                if (when.MinStatMatches is int minStatMatches &&
+                    hits < minStatMatches)
+                {
+                    return false;
+                }
+
+                if (when.MaxStatMatches is int maxStatMatches &&
+                    hits > maxStatMatches)
+                {
+                    return false;
+                }
+            }
+            else if (!when.StatsAll && hits == 0)
+            {
+                return false;
+            }
+        }
+        else if (boundedStatMatches)
+        {
+            return false;
         }
 
         return true;
