@@ -389,11 +389,16 @@ h3.sec{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(
 .gutter i{position:absolute;right:6px;font:12.5px/1.65 var(--mono);color:var(--faint);font-style:normal}
 .gutter i.bad{color:var(--bad);font-weight:700}
 .gutter i.head{color:var(--gold-dim)}
-.marks{position:absolute;inset:0;overflow:hidden;pointer-events:none}
-.emark{position:absolute;right:9px;max-width:66%;font:11px/1.65 var(--mono);color:#ffd9d5;
-  background:rgba(102,32,28,.9);border:1px solid rgba(226,105,95,.6);border-radius:3px;padding:0 6px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.emark.mod{color:#ffe9bd;background:rgba(96,70,14,.9);border-color:rgba(224,167,46,.6)}
+#problems{flex:none;max-height:120px;overflow:auto;border-top:1px solid var(--line);background:var(--sunk)}
+#problems:empty{display:none}
+.problem{display:flex;align-items:baseline;gap:8px;padding:5px 12px;font:11px/1.45 var(--mono);
+  color:#ffd9d5;background:rgba(102,32,28,.18);border-left:2px solid var(--bad)}
+.problem+.problem{border-top:1px solid rgba(226,105,95,.18)}
+.problem.mod{color:#ffe9bd;background:rgba(96,70,14,.18);border-left-color:var(--warn)}
+.problem button{flex:none;background:transparent;border:0;padding:0;color:inherit;font:inherit;font-weight:700;
+  cursor:pointer}
+.problem button:hover{text-decoration:underline}
+.problem span{min-width:0;overflow-wrap:anywhere}
 .k-show{color:#5fd08a;font-weight:600}
 .k-hide{color:var(--dim);font-weight:600}
 .k-deco{color:var(--gold)}
@@ -507,10 +512,10 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
       <div class="edit">
         <div class="gutter"><div id="gutin"></div></div>
         <pre id="hl" aria-hidden="true"></pre>
-        <div class="marks"><div id="markin"></div></div>
         <textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="soft"
                   aria-label="loot filter text"></textarea>
       </div>
+      <div id="problems" role="status" aria-live="polite"></div>
       <div id="coach"></div>
       <div class="txtfoot"><span>ctrl+space suggests</span><span class="grow"></span>
         <button class="btn tiny" id="tidy" title="reprint the compiled rules — drops comments">tidy</button></div>
@@ -1534,38 +1539,36 @@ function highlightLine(line) {
 }
 
 /**
- * Repaint the highlight layer, the gutter and the inline error notes.
+ * Repaint the highlight layer, the gutter and the diagnostics strip.
  *
  * Every line is its own block element so its top can be MEASURED. Multiplying the line number by the
  * line height is right until a line wraps — and the long `Type` and `AlwaysShow` lines, the ones you
- * most want a marker against, are exactly the ones that wrap.
+ * most want a gutter marker against, are exactly the ones that wrap.
  */
 function paint() {
   const lines = src.value.split('\n');
   $('hl').innerHTML = lines.map((line) => '<div class="ln">' + highlightLine(line) + '</div>').join('');
   const rows = $('hl').children;
-  const byLine = new Map();
-  for (const error of (plan ? plan.errors : [])) if (!byLine.has(error.line)) byLine.set(error.line, error);
+  const errors = plan ? plan.errors : [];
+  const errorLines = new Set(errors.map((error) => error.line));
   const heads = new Set((plan ? plan.blocks : []).map((b) => b.head));
   let gut = '';
-  let marks = '';
   for (let i = 0; i < lines.length; i++) {
     const top = rows[i] ? rows[i].offsetTop : 0;
-    const error = byLine.get(i + 1);
+    const error = errorLines.has(i + 1);
     gut += '<i class="' + (error ? 'bad' : (heads.has(i) ? 'head' : '')) + '" style="top:' + top + 'px">' + (i + 1) + '</i>';
-    if (error) {
-      marks += '<div class="emark' + (error.mod ? ' mod' : '') + '" style="top:' + top + 'px">'
-        + esc(error.message) + '</div>';
-    }
   }
   $('gutin').innerHTML = gut;
-  $('markin').innerHTML = marks;
+  $('problems').innerHTML = errors.map((error) =>
+    '<div class="problem' + (error.mod ? ' mod' : '') + '"><button data-line="' + (error.line - 1)
+      + '" title="go to line ' + error.line + '">line ' + error.line + '</button><span>'
+      + esc(error.message) + '</span></div>').join('');
   syncScroll();
 }
 function syncScroll() {
   const offset = 'translateY(' + (-src.scrollTop) + 'px)';
   $('gutin').style.transform = offset;
-  $('markin').style.transform = offset;
+  // Diagnostics live below the editing surface; scrolling must never move them over typed text.
   $('hl').scrollTop = src.scrollTop;
   $('hl').scrollLeft = src.scrollLeft;
 }
@@ -2400,6 +2403,11 @@ function showTab(name) {
 document.querySelector('.tabs').addEventListener('click', (event) => {
   const button = event.target.closest('[data-tab]');
   if (button) showTab(button.dataset.tab);
+});
+
+$('problems').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-line]');
+  if (button) jumpToLine(Number(button.dataset.line));
 });
 
 $('cascade').addEventListener('click', (event) => {
