@@ -60,6 +60,7 @@ internal static class ItemCatalog
     private const string GemKind = "Gem";
     private const string ConsumableKind = "Consumable";
     private const string JunkKind = "Junk";
+    private const string ArtifactKind = "Artifact";
 
     /// <summary>
     /// A cap the game refused to give a range for — this stat is not in this item's substat pool.
@@ -83,6 +84,7 @@ internal static class ItemCatalog
     // marshaller pick the 4-byte Win32 BOOL.
     private delegate IntPtr GetSubstatConfigFn(IntPtr config, IntPtr methodInfo);
     private unsafe delegate byte GetSubstatRangeFn(int statType, IntPtr substatConfig, int* min, int* max, IntPtr methodInfo);
+    private delegate IntPtr GetArtifactSubstatConfigFn(IntPtr methodInfo);
 
     /// <summary>One equip, card or gem, as the game's own config describes it.</summary>
     internal sealed class Entry
@@ -104,6 +106,8 @@ internal static class ItemCatalog
         /// pointer stays valid as long as the catalog it came from does.
         /// </summary>
         public IntPtr Config;
+        /// <summary>True when <see cref="Config"/> is an `ArtifactSetConfig` rather than an equip.</summary>
+        public bool Artifact;
 
         /**
          * Stat ordinal -> base cap, filled on demand and never evicted.
@@ -125,8 +129,9 @@ internal static class ItemCatalog
     /// <summary>Configs the catalog holds, of every kind. Zero until <see cref="Ready"/>.</summary>
     public static int Count { get; private set; }
 
-    /// <summary>How many of <see cref="Count"/> are equips — the only kind with substat caps.</summary>
+    /// <summary>How many indexed configs are equipment.</summary>
     public static int Equips { get; private set; }
+    public static int Artifacts { get; private set; }
     public static int Cards { get; private set; }
     public static int Gems { get; private set; }
     public static int Consumables { get; private set; }
@@ -142,6 +147,7 @@ internal static class ItemCatalog
 
     private static IntPtr _appClass;
     private static int _equipsOffset = -1;
+    private static int _artifactSetsOffset = -1;
     private static int _cardsOffset = -1;
     private static int _gemsOffset = -1;
     private static int _consumablesOffset = -1;
@@ -155,6 +161,7 @@ internal static class ItemCatalog
     private static int _substatValuesOffset = -1;
 
     private static GetSubstatConfigFn? _getSubstatConfig;
+    private static GetArtifactSubstatConfigFn? _getArtifactSubstatConfig;
     private static GetSubstatRangeFn? _getSubstatRange;
 
     /// <summary>`EquipType` ordinal -> member name, read from live metadata at boot. Never hardcoded.</summary>
@@ -185,6 +192,7 @@ internal static class ItemCatalog
         IntPtr formula = Il2CppMeta.FindClass("", "Formula", HookCensus.GameAssemblies);
 
         _equipsOffset = Il2CppMeta.FieldOffset(runtimeClass, "Equips");
+        _artifactSetsOffset = Il2CppMeta.FieldOffset(runtimeClass, "ArtifactSets");
         // Resolved for the log line only. Nothing indexes it: `Formula.GetSubstatConfig` does that
         // lookup, and it also derives the default pool for an equip whose `Substats` is empty. It is
         // still worth reporting, because if it ever reads missing, the game moved the whole database.
@@ -228,12 +236,13 @@ internal static class ItemCatalog
 
         // The offsets go in the log line on purpose. On a future game build that breaks this, a
         // player's pasted log is the only evidence of WHAT moved, and one word per field says it.
-        Summary = $"App.ServerRuntime {Hex(appField)}, Equips {Hex(_equipsOffset)}, Cards {Hex(_cardsOffset)}, "
-                + $"Gems {Hex(_gemsOffset)}, Consumables {Hex(_consumablesOffset)}, Junks {Hex(_junksOffset)}, "
-                + $"EquipSubstats {Hex(_substatsMapOffset)}, "
+        Summary = $"App.ServerRuntime {Hex(appField)}, Equips {Hex(_equipsOffset)}, Artifacts {Hex(_artifactSetsOffset)}, "
+                + $"Cards {Hex(_cardsOffset)}, Gems {Hex(_gemsOffset)}, Consumables {Hex(_consumablesOffset)}, "
+                + $"Junks {Hex(_junksOffset)}, EquipSubstats {Hex(_substatsMapOffset)}, "
                 + $"Id {Hex(_idOffset)}, DisplayName {Hex(_displayNameOffset)}, Type {Hex(_typeOffset)}, "
                 + $"Set {Hex(_setOffset)}, LevelRequired {Hex(_levelOffset)}, Values {Hex(_substatValuesOffset)}, "
-                + $"{_equipTypeNames.Count} equip types, ranges {(RangesReadable ? "readable" : "UNREADABLE")}";
+                + $"{_equipTypeNames.Count} equip types, equip ranges {(EquipRangesReadable ? "readable" : "UNREADABLE")}, "
+                + $"artifact ranges {(ArtifactRangesReadable ? "readable" : "UNREADABLE")}";
 
         if (!Installed)
         {
@@ -247,8 +256,11 @@ internal static class ItemCatalog
         return true;
     }
 
-    /// <summary>Both `Formula` helpers bound. False leaves names and types working and caps not.</summary>
-    private static bool RangesReadable => _getSubstatConfig is not null && _getSubstatRange is not null;
+    /// <summary>The equip helpers needed for displayed-value rules.</summary>
+    private static bool EquipRangesReadable => _getSubstatConfig is not null && _getSubstatRange is not null;
+
+    /// <summary>The artifact helper plus the shared range reader.</summary>
+    private static bool ArtifactRangesReadable => _getArtifactSubstatConfig is not null && _getSubstatRange is not null;
 
     private static void BindFormula(IntPtr formula)
     {
@@ -259,14 +271,18 @@ internal static class ItemCatalog
         // `&`; the fallback matches on the two REFERENCE parameters plus arity, so a runtime that
         // spells byref differently loses the belt but keeps the braces.
         Il2CppMeta.MethodInfo? config = Il2CppMeta.FindOverload(formula, "GetSubstatConfig", "EquipConfig");
+        Il2CppMeta.MethodInfo? artifactConfig = Il2CppMeta.FindOverload(formula, "GetArtifactSubstatConfig");
         Il2CppMeta.MethodInfo? range =
             Il2CppMeta.FindOverload(formula, "GetSubstatRange", "StatType", "EquipSubstatRuntime", "System.Int32&", "System.Int32&")
             ?? Il2CppMeta.FindMethod(formula, "GetSubstatRange", m =>
                 m.ParamCount == 4 && m.ParamTypeNames[0] == "StatType" && m.ParamTypeNames[1] == "EquipSubstatRuntime");
 
-        if (config is null || config.NativePtr == IntPtr.Zero || range is null || range.NativePtr == IntPtr.Zero) return;
-        _getSubstatConfig = Marshal.GetDelegateForFunctionPointer<GetSubstatConfigFn>(config.NativePtr);
+        if (range is null || range.NativePtr == IntPtr.Zero) return;
         _getSubstatRange = Marshal.GetDelegateForFunctionPointer<GetSubstatRangeFn>(range.NativePtr);
+        if (config is not null && config.NativePtr != IntPtr.Zero)
+            _getSubstatConfig = Marshal.GetDelegateForFunctionPointer<GetSubstatConfigFn>(config.NativePtr);
+        if (artifactConfig is not null && artifactConfig.NativePtr != IntPtr.Zero)
+            _getArtifactSubstatConfig = Marshal.GetDelegateForFunctionPointer<GetArtifactSubstatConfigFn>(artifactConfig.NativePtr);
     }
 
     public static void Uninstall()
@@ -275,6 +291,7 @@ internal static class ItemCatalog
         Ready = false;
         Count = 0;
         Equips = 0;
+        Artifacts = 0;
         Cards = 0;
         Gems = 0;
         Consumables = 0;
@@ -282,6 +299,7 @@ internal static class ItemCatalog
         _entries.Clear();
         _equipTypeNames.Clear();
         _getSubstatConfig = null;
+        _getArtifactSubstatConfig = null;
         _getSubstatRange = null;
         // The once-flags reset with everything else: a reloaded plugin has to be able to say
         // "catalog ready" again, or its log goes quiet about the only transition that matters.
@@ -295,9 +313,10 @@ internal static class ItemCatalog
 
     /// <summary>What this is doing, for the log — the counters that separate "bound" from "answering".</summary>
     public static string Status()
-        => $"item catalog: installed {Installed}, ready {Ready}, {Equips} equips, {Cards} cards, "
-         + $"{Gems} gems, {Consumables} consumables, {Junks} junk, {_equipTypeNames.Count} equip types, "
-         + $"caps {(RangesReadable ? "readable" : "UNREADABLE")}";
+        => $"item catalog: installed {Installed}, ready {Ready}, {Equips} equips, {Artifacts} artifacts, "
+         + $"{Cards} cards, {Gems} gems, {Consumables} consumables, {Junks} junk, "
+         + $"{_equipTypeNames.Count} equip types, equip caps {(EquipRangesReadable ? "readable" : "UNREADABLE")}, "
+         + $"artifact caps {(ArtifactRangesReadable ? "readable" : "UNREADABLE")}";
 
     /// <summary>The catalog's name for an item, or null when it does not know it (or is not ready).</summary>
     public static string? DisplayName(string itemId) => Lookup(itemId)?.DisplayName;
@@ -321,12 +340,12 @@ internal static class ItemCatalog
             WarnValueFormOnce();
             return false;
         }
-        if (!RangesReadable)
+        if (string.IsNullOrEmpty(itemId) || !_entries.TryGetValue(itemId, out Entry? entry)) return false;
+        if (!RangesReadableFor(entry))
         {
             WarnValueFormOnce();
             return false;
         }
-        if (string.IsNullOrEmpty(itemId) || !_entries.TryGetValue(itemId, out Entry? entry)) return false;
 
         int cap = CapFor(entry, statType);
         if (cap == NoCap) return false;
@@ -334,6 +353,37 @@ internal static class ItemCatalog
         value = ScaledValue(cap, rollPct);
         return true;
     }
+
+    /// <summary>
+    /// Whether this roll prints the legal maximum for its item/stat, or better for an over-roll.
+    /// False means the catalog could not answer; <paramref name="top"/> is meaningful only on true.
+    /// </summary>
+    public static bool TryIsDisplayedTop(string itemId, int statType, int rollPct, out bool top)
+    {
+        top = false;
+        if (!EnsureCatalog() || string.IsNullOrEmpty(itemId)
+            || !_entries.TryGetValue(itemId, out Entry? entry)
+            || !RangesReadableFor(entry))
+        {
+            WarnValueFormOnce();
+            return false;
+        }
+
+        int cap = CapFor(entry, statType);
+        if (cap == NoCap) return false;
+        top = IsTopDisplayed(cap, rollPct);
+        return true;
+    }
+
+    internal static bool IsTopDisplayed(int cap, int rollPct)
+    {
+        int printed = ScaledValue(cap, rollPct);
+        int legalTop = ScaledValue(cap, 100);
+        return cap >= 0 ? printed >= legalTop : printed <= legalTop;
+    }
+
+    private static bool RangesReadableFor(Entry entry)
+        => entry.Artifact ? ArtifactRangesReadable : EquipRangesReadable;
 
     /**
      * A roll percentage and a base cap -> the number the game prints. Pure, and separate so it can
@@ -368,11 +418,13 @@ internal static class ItemCatalog
         if (entry.Caps.TryGetValue(statType, out int cached)) return cached;
 
         int cap = NoCap;
-        if (entry.Config != IntPtr.Zero && _getSubstatConfig is not null && _getSubstatRange is not null)
+        if (entry.Config != IntPtr.Zero && _getSubstatRange is not null)
         {
-            // `GetSubstatConfig` also derives the default pool when `EquipConfig.Substats` is empty,
-            // which is why it is worth calling instead of indexing `EquipSubstats` ourselves.
-            IntPtr substatConfig = _getSubstatConfig(entry.Config, IntPtr.Zero);
+            // Equipment has a pool derived from its config. Artifacts share the game's dedicated
+            // artifact pool; their set config identifies the item but is not an EquipConfig.
+            IntPtr substatConfig = entry.Artifact
+                ? (_getArtifactSubstatConfig is null ? IntPtr.Zero : _getArtifactSubstatConfig(IntPtr.Zero))
+                : (_getSubstatConfig is null ? IntPtr.Zero : _getSubstatConfig(entry.Config, IntPtr.Zero));
 
             // `GetSubstatRange` tolerates a null config but dereferences its `Values` dictionary
             // unconditionally once it has one. A managed null-reference thrown inside a raw call
@@ -431,6 +483,7 @@ internal static class ItemCatalog
         }
 
         Equips = Index(rows, "", true);
+        Artifacts = Index(Il2CppMeta.DictionaryEntries(ReadMap(runtime, _artifactSetsOffset)), ArtifactKind, false, true);
         Cards = Index(Il2CppMeta.DictionaryEntries(ReadMap(runtime, _cardsOffset)), CardKind, false);
         Gems = Index(Il2CppMeta.DictionaryEntries(ReadMap(runtime, _gemsOffset)), GemKind, false);
         Consumables = Index(Il2CppMeta.DictionaryEntries(ReadMap(runtime, _consumablesOffset)), ConsumableKind, false);
@@ -444,7 +497,8 @@ internal static class ItemCatalog
             return false;
         }
 
-        _log($"catalog ready: {Equips} equips, {Cards} cards, {Gems} gems, {Consumables} consumables, {Junks} junk");
+        _log($"catalog ready: {Equips} equips, {Artifacts} artifacts, {Cards} cards, {Gems} gems, "
+           + $"{Consumables} consumables, {Junks} junk");
         WriteReference();
         return true;
     }
@@ -466,7 +520,7 @@ internal static class ItemCatalog
      * that class keeps at the same byte. `Id` and `DisplayName` are the only two that are shared,
      * because they are declared on `BaseConfig`, and they are the two this exists for.
      */
-    private static int Index(List<(IntPtr Key, IntPtr Value)> rows, string kind, bool equip)
+    private static int Index(List<(IntPtr Key, IntPtr Value)> rows, string kind, bool equip, bool artifact = false)
     {
         int added = 0;
         foreach ((IntPtr key, IntPtr value) in rows)
@@ -489,7 +543,8 @@ internal static class ItemCatalog
                     : kind,
                 Set = equip ? Il2CppMeta.ReadStringField(value, _setOffset) ?? "" : "",
                 LevelRequired = equip && _levelOffset >= 0 ? Marshal.ReadInt32(value, _levelOffset) : 0,
-                Config = equip ? value : IntPtr.Zero,
+                Config = equip || artifact ? value : IntPtr.Zero,
+                Artifact = artifact,
             };
             added++;
         }
@@ -577,11 +632,11 @@ internal static class ItemCatalog
             .Append("# changes. It is here so you never have to guess a spelling. Your rules go in\n")
             .Append("# ").Append(FilterFile.FileName).Append(", next to this file.\n")
             .Append("#\n")
-            .Append("# Equipment, cards, gems, consumables and junk are listed. Only equipment has a set, a\n")
-            .Append("# level requirement and substats, so those columns are blank for the rest and `Stat`,\n")
-            .Append("# `TopRolls`, `AvgRoll` and `OverRoll` never match one of them. Their ids are often\n")
-            .Append("# nothing like their names — \"Buzzing Hive Fragment\" is `Lure Sting` — which is exactly\n")
-            .Append("# why this file has both columns.\n")
+            .Append("# Equipment, artifacts, cards, gems, consumables and junk are listed. Equipment and\n")
+            .Append("# artifacts can roll substats; set and level requirement are equipment-only. `Stat`,\n")
+            .Append("# `TopRolls`, `HighRolls`, `AvgRollPct` and `OverRoll` never match the other kinds. Their\n")
+            .Append("# ids are often nothing like their names — \"Buzzing Hive Fragment\" is `Lure Sting` —\n")
+            .Append("# which is exactly why this file has both columns.\n")
             .Append("#\n")
             .Append("# Anything in the Name column works as a rule line, quoted if it has spaces, and Name\n")
             .Append("# and Type both take a comma-separated list meaning ANY of these:\n")
@@ -589,7 +644,7 @@ internal static class ItemCatalog
             .Append("#     Name \"Vampiric Fang Clip\"      matches the name, the id, or the text on the cell\n")
             .Append("#     Name \"Buzzing Hive Fragment\", \"Abyssal Idol\"    either one\n")
             .Append("#     Type Dagger, Katar             the Type column below\n")
-            .Append("#     Type Card, Gem, Consumable, Junk               everything of those kinds\n")
+            .Append("#     Type Artifact, Card, Gem, Consumable, Junk     whole non-equipment kinds\n")
             .Append("#     Stat Agi >= 3                  the printed value, from the Stats section below\n")
             .Append("#     Stat Agi >= 90%                how WELL that line rolled — a different question\n")
             .Append("#\n")

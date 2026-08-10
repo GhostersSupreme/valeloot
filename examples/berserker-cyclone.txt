@@ -47,5 +47,5 @@ Show "Already refined"
     Highlight dot
 
 Hide "vendor trash"
-    AvgRoll   < 35
-    TopRolls  < 1
+    AvgRollPct < 35
+    HighRolls  < 1

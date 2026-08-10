@@ -9,9 +9,14 @@ Show "both roll bounds"
     TopRolls  < 4
     Color     #4ade80
 
+Show "both raw high-roll bounds"
+    HighRolls >= 2
+    HighRolls < 4
+    Color     #4ade80
+
 Show "both average bounds"
-    AvgRoll   >= 40
-    AvgRoll   < 80
+    AvgRollPct >= 40
+    AvgRollPct < 80
     Color     #4ade80
 
 Show "refine"
@@ -25,7 +30,8 @@ Show "everything at once"
     Stat      Crit >= 8
     AnyStat
     TopRolls  >= 1
-    AvgRoll   >= 30
+    HighRolls >= 1
+    AvgRollPct >= 30
     Refine    >= 3
     Favorite
     Chaos

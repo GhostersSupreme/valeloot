@@ -26,7 +26,8 @@ namespace ValeLoot;
 ///     Highlight glow
 ///
 /// Hide "rolled badly"
-///     AvgRoll   &lt; 35
+///     AvgRollPct &lt; 35
+///     HighRolls  &lt; 1
 ///
 /// AlwaysShow "Spirit Ward", "Windborne Rune"
 /// AlwaysHide "Rusty Dagger"
@@ -418,21 +419,36 @@ internal static class FilterParser
                         break;
                     }
                     if (min is int minimum) when.MinTopRolls = minimum;
-                    // `TopRolls < 1` is "nothing good on it" — the core of any trash rule — so the
-                    // maximum floors at zero instead of going negative and matching nothing.
+                    // `TopRolls < 1` means no line reaches its displayed cap, so the maximum floors
+                    // at zero instead of going negative and matching nothing.
                     if (max is int maximum) when.MaxTopRolls = Math.Max(0, maximum);
                     break;
                 }
 
-                case "avgroll":
+                case "highrolls":
                 {
                     if (!Bound(remainder, out int? min, out int? max))
                     {
-                        errors.Add(new FilterError(line, text, $"AvgRoll needs a comparison like \"< 35\", got \"{remainder}\""));
+                        errors.Add(new FilterError(line, text, $"HighRolls needs a comparison like \">= 3\", got \"{remainder}\""));
                         break;
                     }
-                    if (min is int minimum) when.MinAvgRoll = minimum;
-                    if (max is int maximum) when.MaxAvgRoll = maximum;
+                    if (min is int minimum) when.MinHighRolls = minimum;
+                    if (max is int maximum) when.MaxHighRolls = Math.Max(0, maximum);
+                    break;
+                }
+
+                // Legacy spelling remains accepted so existing filters keep their raw-percentage
+                // behavior. Formatting and new documentation use the explicit name.
+                case "avgroll":
+                case "avgrollpct":
+                {
+                    if (!Bound(remainder, out int? min, out int? max))
+                    {
+                        errors.Add(new FilterError(line, text, $"AvgRollPct needs a comparison like \"< 35\", got \"{remainder}\""));
+                        break;
+                    }
+                    if (min is int minimum) when.MinAvgRollPct = minimum;
+                    if (max is int maximum) when.MaxAvgRollPct = maximum;
                     break;
                 }
 

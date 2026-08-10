@@ -18,8 +18,8 @@ const item: OwnedGear = {
     { stat: 'Vit', base: 3, rollPct: 60, isChaos: false, over: false },
   ],
   topRolls: 0,
-  avgRoll: 70,
-  favorite: false,
+  highRolls: 0,
+  avgRollPct: 70,
 };
 
 function condition(comparison: string): LootCondition {

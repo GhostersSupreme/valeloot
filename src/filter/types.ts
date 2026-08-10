@@ -55,10 +55,12 @@ export interface OwnedGear {
   slotType: string;
   refine: number;
   lines: RollLine[];
-  /** Lines at or above the caller's threshold. "Triple top roll" = 3. */
-  topRolls: number;
-  /** Mean roll percentage across placeable lines; null when none could be placed. */
-  avgRoll: number | null;
+  /** Lines whose printed value reaches the legal displayed maximum; null when unresolved. */
+  topRolls: number | null;
+  /** Lines at or above the caller's raw-roll threshold. */
+  highRolls: number;
+  /** Mean hidden roll percentage across placeable lines; null when none could be placed. */
+  avgRollPct: number | null;
   favorite: boolean;
   /** Set when the caller's catalog has no such item (unreleased, or renamed). */
   unknown?: true;

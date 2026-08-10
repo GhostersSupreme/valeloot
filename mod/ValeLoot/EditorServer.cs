@@ -875,10 +875,9 @@ internal static class EditorServer
     /**
      * One item in the bag, captured on the main thread and never touched again.
      *
-     * `TopRolls` and `AvgRoll` are NOT stored: they are functions of the rolls and the threshold, and
-     * the threshold changes the moment the player saves `Threshold 95` — storing them would hand the
-     * editor counts from the previous filter. They are computed at serialise time, on the listener
-     * thread, from the immutable roll list.
+     * `TopRolls` is captured with the catalog-backed printed values. `HighRolls` and `AvgRollPct`
+     * are computed from the immutable raw rolls when serialised; only `HighRolls` depends on the
+     * current threshold.
      */
     internal sealed class BagItem
     {
@@ -888,10 +887,12 @@ internal static class EditorServer
         public readonly string Type;
         public readonly int Refine;
         public readonly bool Favorite;
+        /// <summary>Displayed-max line count, or -1 when the catalog could not answer.</summary>
+        public readonly int TopRolls;
         public readonly BagLine[] Lines;
 
         public BagItem(string uid, string itemId, string name, string type, int refine, bool favorite,
-                       BagLine[] lines)
+                       int topRolls, BagLine[] lines)
         {
             Uid = uid;
             ItemId = itemId;
@@ -899,6 +900,7 @@ internal static class EditorServer
             Type = type;
             Refine = refine;
             Favorite = favorite;
+            TopRolls = topRolls;
             Lines = lines;
         }
 
@@ -916,22 +918,22 @@ internal static class EditorServer
                 .Append(",\"favorite\":").Append(Favorite ? "true" : "false");
 
             /*
-             * The same two answers `LootFilter.ItemFacts.TopRolls` and `AverageRoll` give, by the same
-             * rules — at or above the threshold counts, the average is rounded away from zero and then
-             * compared as a whole number, and an item with no lines has NO average rather than zero.
-             * They cannot call those: `ItemFacts` is one buffer refilled per cell on the main thread,
-             * and this runs on the listener thread against a snapshot. Keep the two in step; a filter
-             * whose preview disagrees with the game is worse than a preview that says nothing.
+             * HighRolls is the old threshold-based count, now named for its raw-roll semantics.
+             * AvgRollPct remains a rounded hidden percentage. TopRolls was resolved on the main
+             * thread with the item catalog and is immutable here.
              */
-            int top = 0;
+            int high = 0;
             int sum = 0;
             for (int i = 0; i < Lines.Length; i++)
             {
-                if (Lines[i].Roll >= threshold) top++;
+                if (Lines[i].Roll >= threshold) high++;
                 sum += Lines[i].Roll;
             }
-            json.Append(",\"topRolls\":").Append(top.ToString(CultureInfo.InvariantCulture))
-                .Append(",\"avgRoll\":");
+            json.Append(",\"topRolls\":");
+            if (TopRolls < 0) json.Append("null");
+            else json.Append(TopRolls.ToString(CultureInfo.InvariantCulture));
+            json.Append(",\"highRolls\":").Append(high.ToString(CultureInfo.InvariantCulture))
+                .Append(",\"avgRollPct\":");
             if (Lines.Length == 0) json.Append("null");
             else
             {

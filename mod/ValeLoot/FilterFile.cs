@@ -200,9 +200,10 @@ internal static class FilterFile
 #   Name       Kunai      part of the item's name or its id; comma-separated means any of them,
 #                         so Name ""Buzzing Hive Fragment"", ""Abyssal Idol"" is one rule for both
 #   Type       Dagger     the item's type; comma-separated means any of them.
-#                         Card, Gem, Consumable and Junk claim whole kinds at once
-#   TopRolls   >= 2       how many lines rolled at or above Threshold, below
-#   AvgRoll    < 35       average roll quality across its lines, in percent
+#                         Artifact, Card, Gem, Consumable and Junk claim whole kinds at once
+#   TopRolls   >= 2       how many lines print their legal maximum value
+#   HighRolls  >= 2       how many hidden raw rolls reach Threshold, below
+#   AvgRollPct < 35       average hidden roll quality, in percent (legacy AvgRoll still works)
 #   Stat       Agi >= 90% that stat's line rolled in the top tenth of its range
 #   Stat       Agi >= 3   that stat PRINTS at least 3 on this item
 #   StatMatches >= 3      at least three of the listed Stat conditions must match
@@ -232,12 +233,11 @@ Threshold 90
 # AlwaysHide ""Rusty Dagger""
 
 
-# ── BY ROLL QUALITY ──────────────────────────────────────────────────────────────
-# TopRolls counts lines that rolled at or above Threshold. Two is already rare, so it earns a
-# glow and a noise. Deliberately not ""TopRolls >= 1"", which claims about a quarter of a bag —
-# a rule that catches everything tells you nothing.
+# ── BY DISPLAYED TOP VALUES ───────────────────────────────────────────────────────
+# TopRolls counts lines whose printed value reaches that stat's legal maximum. Low-cap stats can
+# print their maximum below a 90% hidden roll; that still counts, because it is what the tooltip says.
 
-Show ""Two top rolls""
+Show ""Two displayed top rolls""
     TopRolls  >= 2
     Color     #e9c46a
     Tag       TOP2
@@ -316,7 +316,7 @@ Show ""Chaos paid off""
 # claims at all is simply left alone, which will be most of your bag, and should be.
 
 Hide ""vendor trash""
-    AvgRoll   < 35
-    TopRolls  < 1
+    AvgRollPct < 35
+    HighRolls  < 1
 ";
 }

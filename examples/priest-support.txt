@@ -47,5 +47,5 @@ Show "Already refined"
 
 # A support has no use for raw attack rolls.
 Hide "damage-only junk"
-    AvgRoll   < 40
-    TopRolls  < 1
+    AvgRollPct < 40
+    HighRolls  < 1

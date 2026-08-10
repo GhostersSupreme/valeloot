@@ -27,10 +27,9 @@ namespace ValeLoot;
 /// ## Rolls, and the two questions the `%` separates
 ///
 /// `StatData.Value` IS the roll percentage, 0..100 — not the number the game prints. The game derives
-/// what it prints: `displayed = cap * (2/3 + roll/300)`, rounded. So "top roll" questions are free and
-/// in-process, and `TopRolls`, `AvgRoll` and `Stat Agi >= 90%` all work from the item alone. The
-/// ABSOLUTE form, `Stat Agi >= 3`, needs the item's base cap, which <see cref="ItemCatalog"/> reads
-/// out of the game's own configs.
+/// what it prints: `displayed = cap * (2/3 + roll/300)`, rounded. `HighRolls`, `AvgRollPct` and
+/// `Stat Agi >= 90%` work from the item alone. `TopRolls` and the absolute form `Stat Agi >= 3`
+/// also need the item's base cap, which <see cref="ItemCatalog"/> reads out of the game's own configs.
 ///
 /// The two stay SEPARATE fields on <see cref="StatCondition"/> rather than one number with a flag,
 /// because they are different questions and the whole point of the `%` suffix is that the player
@@ -48,7 +47,7 @@ internal static class LootFilter
     /// <summary>Most substat lines one item can carry. Bounds the fact buffer; overflow is dropped.</summary>
     public const int MaxStats = 16;
 
-    /// <summary>Roll percentage that counts as a top roll unless the filter says otherwise.</summary>
+    /// <summary>Default raw-roll cutoff used by `HighRolls`.</summary>
     public const int DefaultThreshold = 90;
 
     /**
@@ -102,8 +101,24 @@ internal static class LootFilter
             StatCount++;
         }
 
-        /// <summary>Lines rolling at or above the threshold — the "triple top roll" count.</summary>
-        public int TopRolls(int threshold)
+        /// <summary>
+        /// Count lines whose printed value reaches the legal displayed maximum.
+        /// False means one or more lines could not be resolved through the live catalog.
+        /// </summary>
+        public bool TryTopRolls(out int count)
+        {
+            count = 0;
+            if (StatCount == 0) return false;
+            for (int i = 0; i < StatCount; i++)
+            {
+                if (!ItemCatalog.TryIsDisplayedTop(Id, StatTypes[i], StatRolls[i], out bool top)) return false;
+                if (top) count++;
+            }
+            return true;
+        }
+
+        /// <summary>Lines whose hidden raw roll reaches the filter's `Threshold`.</summary>
+        public int HighRolls(int threshold)
         {
             int count = 0;
             for (int i = 0; i < StatCount; i++) if (StatRolls[i] >= threshold) count++;
@@ -113,7 +128,7 @@ internal static class LootFilter
         /**
          * Mean roll, rounded to a whole percent, or -1 when the item has no lines.
          *
-         * Rounded, and then compared as a whole number, so `AvgRoll < 35` means exactly what a player
+         * Rounded, and then compared as a whole number, so `AvgRollPct < 35` means exactly what a player
          * gets by averaging the percentages they can see. The overlay compares unrounded and nudges its
          * strict bounds by 1e-9 because it draws the unrounded figure in its own HUD; in here there is
          * no such HUD, so a boundary the player cannot reproduce by hand would be a boundary they
@@ -171,8 +186,10 @@ internal static class LootFilter
         public int? MinRefine;
         public int? MinTopRolls;
         public int? MaxTopRolls;
-        public int? MinAvgRoll;
-        public int? MaxAvgRoll;
+        public int? MinHighRolls;
+        public int? MaxHighRolls;
+        public int? MinAvgRollPct;
+        public int? MaxAvgRollPct;
         public StatCondition[]? Stats;
 
         /// <summary>
@@ -194,7 +211,9 @@ internal static class LootFilter
 
         public bool IsEmpty =>
             Types is null && Names is null && MinRefine is null
-            && MinTopRolls is null && MaxTopRolls is null && MinAvgRoll is null && MaxAvgRoll is null
+            && MinTopRolls is null && MaxTopRolls is null
+            && MinHighRolls is null && MaxHighRolls is null
+            && MinAvgRollPct is null && MaxAvgRollPct is null
             && (Stats is null || Stats.Length == 0)
             && MinStatMatches is null && MaxStatMatches is null
             && HasChaos is null && Favorite is null && OverRoll is null;
@@ -348,17 +367,24 @@ internal static class LootFilter
 
         if (when.MinTopRolls is not null || when.MaxTopRolls is not null)
         {
-            int top = item.TopRolls(threshold);
+            if (!item.TryTopRolls(out int top)) return false;
             if (when.MinTopRolls is int minTop && top < minTop) return false;
             if (when.MaxTopRolls is int maxTop && top > maxTop) return false;
         }
 
-        if (when.MinAvgRoll is not null || when.MaxAvgRoll is not null)
+        if (when.MinHighRolls is not null || when.MaxHighRolls is not null)
+        {
+            int high = item.HighRolls(threshold);
+            if (when.MinHighRolls is int minHigh && high < minHigh) return false;
+            if (when.MaxHighRolls is int maxHigh && high > maxHigh) return false;
+        }
+
+        if (when.MinAvgRollPct is not null || when.MaxAvgRollPct is not null)
         {
             int average = item.AverageRoll();
             if (average < 0) return false;
-            if (when.MinAvgRoll is int minAvg && average < minAvg) return false;
-            if (when.MaxAvgRoll is int maxAvg && average > maxAvg) return false;
+            if (when.MinAvgRollPct is int minAvg && average < minAvg) return false;
+            if (when.MaxAvgRollPct is int maxAvg && average > maxAvg) return false;
         }
 
         bool boundedStatMatches =

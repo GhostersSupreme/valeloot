@@ -128,7 +128,7 @@ have to think about overlap — only about priority.
 ```
 Threshold 90
 
-Show "Two top rolls"
+Show "Two displayed top rolls"
     TopRolls  >= 2
     Color     #e9c46a
     Tag       TOP2
@@ -142,16 +142,18 @@ Show "Weapons worth keeping"
     Highlight glow
 
 Hide "vendor trash"
-    AvgRoll   < 35
-    TopRolls  < 1
+    AvgRollPct < 35
+    HighRolls  < 1
 ```
 
 | Condition | Asks |
 |---|---|
 | `Name Kunai` | part of the item's name, or its id |
 | `Type Dagger, Katar` | the item's type; comma-separated means any of them |
-| `TopRolls >= 2` | how many lines rolled at or above `Threshold` |
-| `AvgRoll < 35` | average roll quality across its lines, in percent |
+| `TopRolls >= 2` | how many lines print their legal maximum value; over-rolls count |
+| `HighRolls >= 2` | how many hidden raw rolls reach `Threshold` |
+| `AvgRollPct < 35` | average hidden roll quality across its lines, in percent |
+| `AvgRoll < 35` | legacy alias for `AvgRollPct`; existing filters remain valid |
 | `Stat Agi >= 90%` | that stat's line rolled in the top tenth of its range |
 | `Stat Agi >= 3` | that stat *prints* at least 3 on this item |
 | `StatMatches >= 3` | at least this many of the listed `Stat` conditions must match |
@@ -278,8 +280,8 @@ with any pack you download; that is between you and whoever made it.
 - **Names work even when the id doesn't look like one.** ValeLoot reads the game's own configs, so
   `Name "Abomination Card"` finds the card the game calls `Abomination`, and `Name "Buzzing Hive
   Fragment"` finds `Lure Sting`. Both columns are in `valeloot-items.txt`.
-- **Only equipment rolls substats.** `Stat`, `TopRolls`, `AvgRoll` and `OverRoll` never match a card, gem,
-  consumable or junk. Use `Name`, `Type` or `Favorite` for those.
+- **Equipment and artifacts roll substats.** `Stat`, `TopRolls`, `HighRolls`, `AvgRollPct` and
+  `OverRoll` never match a card, gem, consumable or junk. Use `Name`, `Type` or `Favorite` for those.
 - **The editor's bag fills in as you scroll.** It shows what it has seen since you logged in, so if the grid
   looks short, open your bag and scroll once.
 - **`Stat Agi >= 3` needs a second after you log in.** If a rule like that looks wrong the moment you get

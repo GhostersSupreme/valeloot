@@ -15,7 +15,7 @@
  *
  *   - `Name` takes a comma-separated list, any one matching.
  *   - `Stat X > 7` excludes 7 (the original folded `>` into `>=`).
- *   - `AvgRoll` bounds are integral, because the mod compares whole percents.
+ *   - `AvgRollPct` bounds are integral, because the mod compares whole percents.
  *
  * The sibling `import type`s also come from `./types.ts` (see that file).
  *
@@ -44,8 +44,8 @@
  *     Stat      Str >= 3
  *
  * Hide "vendor trash"
- *     AvgRoll   < 35
- *     TopRolls  < 1
+ *     AvgRollPct < 35
+ *     HighRolls  < 1
  *
  * AlwaysShow "Spirit Ward", "Windborne Rune"
  * AlwaysHide "Rusty Dagger"
@@ -75,7 +75,7 @@
  *
  * ## Why a bad line is a hard error, not a skipped line
  *
- * Ignoring an unparseable condition WIDENS the block it was in — drop `AvgRoll < 35` from a `Hide` block
+ * Ignoring an unparseable condition WIDENS the block it was in — drop `AvgRollPct < 35` from a `Hide` block
  * and it swallows everything you own, so the bag goes dark and the filter looks broken rather than
  * misread. So a block with any bad line is REJECTED WHOLE and reported with its line number, and
  * `parseLootFilter` never emits a partially-understood rule.
@@ -190,12 +190,10 @@ export function parseLootFilter(text: string): ParsedFilter {
     }
 
     /**
-     * `Threshold 90` — what counts as a top roll, for every `TopRolls` line below it.
+     * `Threshold 90` — what counts as a high raw roll, for every `HighRolls` line below it.
      *
-     * A file-level directive rather than a per-rule one, because it is a definition rather than a
-     * condition: "top roll" means one thing in a filter, and letting two rules disagree about it would
-     * make `TopRolls >= 3` unreadable without scrolling up. Accepted at any indentation for the same
-     * reason the overrides are: it opens no block, so nesting it changes nothing.
+     * A file-level directive rather than a per-rule one, because it defines one cutoff shared by
+     * the filter. `TopRolls` does not use it: top means the maximum displayed value for that stat.
      */
     if (keyword === 'threshold') {
       const value = Number(remainder);
@@ -274,7 +272,7 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
    * `integral` matters: for a COUNT, `> 2` is `>= 3` and `< 1` is `<= 0`, exactly.
    *
    * Percentages used to treat the strict forms as inclusive, which read as a bug the moment it was
-   * seen on real data: `AvgRoll < 35` listed an item displayed as "avg 35%". Whether that item was
+   * seen on real data: `AvgRollPct < 35` listed an item displayed as "avg 35%". Whether that item was
    * 34.6 (correct) or exactly 35.0 (the compromise leaking) is indistinguishable to the player, and
    * a filter you cannot trust at the boundary is a filter you cannot trust. `<` and `>` are now
    * genuinely exclusive, nudged by a value far below display precision but far above float noise.
@@ -398,21 +396,27 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
         break;
       }
 
+      // Backward-compatible alias. The formatter always writes the explicit spelling.
       case 'avgroll':
+      case 'avgrollpct':
         // INTEGRAL, because the mod compares whole percents. `LootFilter.ItemFacts.AverageRoll`
-        // rounds the mean to a whole number, so in game `AvgRoll < 35` excludes an item averaging
-        // 34.6 (it rounds to 35). This parser used to store `34.999999999` and claim it. Whichever
-        // reading is nicer in the abstract, the editor's whole job is to predict the mod, and an
-        // edge case where the preview lights a cell the game leaves dark is just a wrong preview.
+        // rounds the mean to a whole number, so in game `AvgRollPct < 35` excludes an item averaging
+        // 34.6 (it rounds to 35). The editor must make the same boundary decision as the mod.
         bound(text, line, remainder, true, (min, max) => {
-          if (min !== undefined) when.minAvgRoll = min;
-          if (max !== undefined) when.maxAvgRoll = max;
+          if (min !== undefined) when.minAvgRollPct = min;
+          if (max !== undefined) when.maxAvgRollPct = max;
         });
         break;
       case 'toprolls':
         bound(text, line, remainder, true, (min, max) => {
           if (min !== undefined) when.minTopRolls = min;
           if (max !== undefined) when.maxTopRolls = Math.max(0, max);
+        });
+        break;
+      case 'highrolls':
+        bound(text, line, remainder, true, (min, max) => {
+          if (min !== undefined) when.minHighRolls = min;
+          if (max !== undefined) when.maxHighRolls = Math.max(0, max);
         });
         break;
       case 'refine':
@@ -544,18 +548,14 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
 /** Render a filter back out, so the editor and the text stay interchangeable. */
 export function formatLootFilter(parsed: Pick<ParsedFilter, 'rules' | 'overrides' | 'threshold'>): string {
   const out: string[] = [];
-  // Before the rules, because it is a definition every `TopRolls` line below it depends on — and because
-  // dropping it here would quietly change what "top roll" means on every round trip through the editor.
+  // Before the rules, because it defines every `HighRolls` line below it. `TopRolls` is based on
+  // displayed caps and is independent of this raw-roll threshold.
   if (parsed.threshold !== undefined) out.push(`Threshold ${parsed.threshold}`, '');
   /**
-   * Print a stored bound the way it was typed.
-   *
-   * `AvgRoll < 35` is stored as 34.999999999 — the nudge in `parseRuleBlock` that makes `<` genuinely
-   * exclusive. Rounding that to `<= 35` on the way out WIDENS the rule across a save-and-reload: an item
-   * displayed as "avg 35%" would fail the typed filter and pass the reloaded one, which is exactly the
-   * boundary the nudge exists to make trustworthy. So a value within float noise of an integer is
-   * printed back as the strict comparison it came from; a value a player actually typed (35.5) is
-   * printed as itself rather than rounded into a different rule.
+   * `AvgRollPct < 35` is stored just below 35 — the nudge in `parseRuleBlock` that makes `<`
+   * genuinely exclusive. Rounding that to `<= 35` on output would widen the rule across its
+   * boundary. A value within float noise of an integer is therefore printed back as the strict
+   * comparison it came from; a value a player typed (35.5) is printed without rounding.
    */
   const bound = (value: number, inclusive: string, strict: string): string => {
     const nearest = Math.round(value);
@@ -596,10 +596,12 @@ export function formatLootFilter(parsed: Pick<ParsedFilter, 'rules' | 'overrides
     } else if (w.statMode === 'any') {
       out.push('    AnyStat');
     }
-    if (w.minAvgRoll !== undefined) out.push(`    AvgRoll   ${bound(w.minAvgRoll, '>=', '>')}`);
-    if (w.maxAvgRoll !== undefined) out.push(`    AvgRoll   ${bound(w.maxAvgRoll, '<=', '<')}`);
-    if (w.minTopRolls !== undefined) out.push(`    TopRolls  >= ${w.minTopRolls}`);
-    if (w.maxTopRolls !== undefined) out.push(`    TopRolls  <= ${w.maxTopRolls}`);
+    if (w.minAvgRollPct !== undefined) out.push(`    AvgRollPct ${bound(w.minAvgRollPct, '>=', '>')}`);
+    if (w.maxAvgRollPct !== undefined) out.push(`    AvgRollPct ${bound(w.maxAvgRollPct, '<=', '<')}`);
+    if (w.minTopRolls !== undefined) out.push(`    TopRolls   >= ${w.minTopRolls}`);
+    if (w.maxTopRolls !== undefined) out.push(`    TopRolls   <= ${w.maxTopRolls}`);
+    if (w.minHighRolls !== undefined) out.push(`    HighRolls  >= ${w.minHighRolls}`);
+    if (w.maxHighRolls !== undefined) out.push(`    HighRolls  <= ${w.maxHighRolls}`);
     if (w.minRefine !== undefined) out.push(`    Refine    >= ${w.minRefine}`);
     if (w.minSharedStats !== undefined) out.push(`    SharedStats >= ${w.minSharedStats}`);
     if (w.hasChaos === true) out.push('    Chaos');
