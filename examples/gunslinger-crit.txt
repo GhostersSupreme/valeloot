@@ -1,50 +1,133 @@
 # GUNSLINGER — crit launcher
 #
-# Based on couc9527's Gunslinger build from the SpiritValers build library: Launcher +10, Dex
-# gear (Glove_Dex, Armor_Dex), and the numbers that matter — 1,265 Atk, 100% crit, 255% crit
-# damage, 160 ASPD, 550 Hit.
+# Based on couc9527's Gunslinger build from the SpiritValers build library:
+# Launcher +10, Dex gear, 100% crit, and 255% crit damage. Crit rate is already
+# capped, so ranged damage and crit damage outrank additional crit rate.
 #
-# Crit rate is already capped in that build, so crit DAMAGE is what keeps scaling. This filter
-# reflects that: Dex first, crit damage second, plain crit rate last.
+# This cascade separates exact-top focused packages from merely lucky raw rolls.
+# Specific Gunslinger weapons win before broad multi-top and refine fallbacks.
 
 Threshold 90
 
 
-# The guns. Dex on one of these is the drop this class is farming for.
-Show "Gunslinger weapon"
-    Type      Launcher, Shotgun, Rifle, Pistol, GatlingGun
-    Stat      Dex >= 3
-    Color     #e9c46a
-    Tag       GUN
+Show "Chaos over-roll"
+    OverRoll
+    Color     #ff3b30
+    Tag       CHAOS
     Highlight glow
     Sound     chime
 
-# Crit damage keeps paying after crit rate is capped.
-Show "Crit damage"
+# Three exact-top ranged identities on a gun: the premium drop.
+Show "Gunslinger jackpot"
+    Type      Launcher, Shotgun, Rifle, Pistol, GatlingGun
+    Stat      Dex >= 3
+    Stat      AtkMult >= 5
+    Stat      DamageRanged >= 5
+    Stat      Atk >= 5
     Stat      CritDamage >= 10
+    Stat      AtkSpd >= 10
+    Stat      Hit >= 20
+    Stat      Range >= 1
+    Stat      DoubleAttack >= 20
+    Stat      Crit >= 10
+    StatMatches >= 3
+    TopRolls  >= 3
+    Color     #f4d35e
+    Tag       GUN3
+    Highlight glow
+    Sound     chime
+
+# Two exact-top ranged identities; Crit is intentionally last but still useful.
+Show "Gunslinger focused pair"
+    Type      Launcher, Shotgun, Rifle, Pistol, GatlingGun
+    Stat      Dex >= 3
+    Stat      AtkMult >= 5
+    Stat      DamageRanged >= 5
+    Stat      Atk >= 5
+    Stat      CritDamage >= 10
+    Stat      AtkSpd >= 10
+    Stat      Hit >= 20
+    Stat      Range >= 1
+    Stat      DoubleAttack >= 20
+    Stat      Crit >= 10
+    StatMatches >= 2
+    Color     #e9c46a
+    Tag       GUN2
+    Highlight glow
+
+Show "Max Dex gun"
+    Type      Launcher, Shotgun, Rifle, Pistol, GatlingGun
+    Stat      Dex >= 3
+    Color     #ff9f6b
+    Tag       DEX-GUN
+    Highlight mark
+
+# Accessories can combine four relevant caps at their smaller slot-specific maxima.
+Show "Gunslinger accessory"
+    Type      Accessory
+    Stat      AtkMult >= 2
+    Stat      Crit >= 5
+    Stat      Hit >= 10
+    Stat      AtkSpd >= 5
+    StatMatches >= 2
     Color     #f472b6
+    Tag       GUN-ACC
+    Highlight mark
+
+# Crit damage keeps scaling after crit rate reaches 100%.
+Show "Max crit damage"
+    Stat      CritDamage >= 10
+    Color     #ec4899
     Tag       CDMG
     Highlight glow
 
-Show "Maxed Dex"
+Show "Max Dex gear"
     Stat      Dex >= 3
-    Color     #7cc0ff
+    Color     #c4a5ff
     Tag       DEX
     Highlight mark
 
-# Only useful until you are capped — keep it quiet, at dot.
-Show "Crit rate"
-    Stat      Crit >= 8
-    Color     #c4a5ff
-    Tag       CRIT
-    Highlight dot
+Show "Three displayed tops"
+    TopRolls  >= 3
+    Color     #7cc0ff
+    Tag       TOP3
+    Highlight glow
+    Sound     ding
 
-Show "Two top rolls"
+Show "Two displayed tops"
     TopRolls  >= 2
-    Color     #5eead4
+    Color     #60a5fa
     Tag       TOP2
     Highlight mark
 
-Hide "vendor trash"
-    AvgRollPct < 35
-    HighRolls  < 1
+Show "Already refined"
+    Refine    >= 7
+    Color     #fb923c
+    Tag       +7
+    Highlight mark
+
+# Raw top-decile ranged rolls remain candidates even when display rounding misses max.
+Show "Promising ranged roll"
+    Stat      Dex >= 90%
+    Stat      AtkMult >= 90%
+    Stat      DamageRanged >= 90%
+    Stat      Atk >= 90%
+    Stat      CritDamage >= 90%
+    Stat      AtkSpd >= 90%
+    Stat      Hit >= 90%
+    Stat      Range >= 90%
+    Stat      DoubleAttack >= 90%
+    Stat      Crit >= 90%
+    StatMatches >= 1
+    HighRolls >= 1
+    Color     #34d399
+    Tag       RNG?
+    Highlight dot
+
+Show "One displayed top"
+    TopRolls  >= 1
+    Color     #94a3b8
+    Tag       TOP1
+    Highlight dot
+
+Hide "everything"

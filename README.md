@@ -230,19 +230,21 @@ You never have to guess a spelling. ValeLoot writes every item and stat name the
 
 ### Per-class examples
 
-Four starting points in [`examples/`](examples), each built from a public guide in the
-[SpiritValers build library](https://spiritvalers.com/builds) — the gear that build actually wears and
-the stats it actually leans on:
+Four complete starting points in [`examples/`](examples), each built from a public guide in the
+[SpiritValers build library](https://spiritvalers.com/builds). They use `StatMatches` for focused
+packages, `TopRolls` for displayed-max rarity, `HighRolls` for promising raw rolls, refine fallbacks,
+and an explicit final hide:
 
 | File | Based on | Hunts for |
 |---|---|---|
-| [`berserker-cyclone.txt`](examples/berserker-cyclone.txt) | *(Cyclone) Lv1 to 150 Comprehensive Guide* by grindenjoyer | Str on two-handers, attack speed, pre-refined gear |
-| [`priest-support.txt`](examples/priest-support.txt) | *Priest - Zero to Hero* by ragnarok | Vit, Int on wands, shields — a wall, not a damage dealer |
-| [`gunslinger-crit.txt`](examples/gunslinger-crit.txt) | couc9527's launcher build | Dex on guns, and crit **damage** over crit rate, since that build is already capped |
-| [`wizard-frost.txt`](examples/wizard-frost.txt) | *Frost Mage - Tower/Bossing* by danc9399 | Int, casting weapons, MP for long tower runs |
+| [`berserker-cyclone.txt`](examples/berserker-cyclone.txt) | *(Cyclone) Lv1 to 150 Comprehensive Guide* by grindenjoyer | Focused physical pairs on two-handers, Str, attack speed, pre-refined gear |
+| [`priest-support.txt`](examples/priest-support.txt) | *Priest - Zero to Hero* by ragnarok | Defensive wall packages, healing caster pairs, Vit, sustain, shields |
+| [`gunslinger-crit.txt`](examples/gunslinger-crit.txt) | couc9527's launcher build | Focused ranged pairs, Dex on guns, accessory packages, crit damage over capped crit rate |
+| [`wizard-frost.txt`](examples/wizard-frost.txt) | *Frost Mage - Tower/Bossing* by danc9399 | Focused caster pairs, Int, MP sustain, and quiet Agi experiments |
 
-Copy one over your `valeloot-filter.txt` and edit from there. They are meant to be argued with — your
-build is not that build.
+Copy one over your `valeloot-filter.txt` and edit from there. Each example is intentionally strict:
+unmatched items reach `Hide "everything"`. Reorder or remove that last rule if you want unmatched
+items to remain neutral. Your build is not that build.
 
 ## The editor
 

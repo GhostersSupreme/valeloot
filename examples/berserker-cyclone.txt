@@ -1,51 +1,136 @@
 # BERSERKER / WARRIOR — Cyclone
 #
-# Based on "(Cyclone) Lv1 to 150 COMPREHENSIVE GUIDE" by grindenjoyer, from the SpiritValers
-# build library. That build runs Chaos Reaver with Str gear all the way up (Glove_Str,
-# Armor_Str, Feet_Str) at +9, and lands 376 Atk with 21% crit.
+# Based on "(Cyclone) Lv1 to 150 COMPREHENSIVE GUIDE" by grindenjoyer, from the
+# SpiritValers build library. The build runs Chaos Reaver with Str gear throughout
+# and values attack speed after its core physical damage.
 #
-# So this filter looks for: Str, then Atk speed, on the weapons Cyclone actually swings.
+# This is a complete first-match-wins cascade:
+#   1. impossible over-rolls and focused Cyclone packages
+#   2. class-defining single lines
+#   3. globally rare multi-top items and pre-refined gear
+#   4. promising physical rolls
+#   5. everything else hidden
+#
+# TopRolls counts displayed maxima. HighRolls uses the raw-roll Threshold.
+# StatMatches counts how many of the listed Stat lines match.
 
 Threshold 90
 
 
-# Two-handers are the whole build. A Str roll on one is worth stopping for.
-Show "Cyclone weapon"
-    Type      Axe, Sword, Twinblade, Scythe, Spear
-    Stat      Str >= 3
-    Color     #e9c46a
-    Tag       CYCLONE
+# Chaos-widened lines can exceed their legal maximum. Never bury one.
+Show "Chaos over-roll"
+    OverRoll
+    Color     #ff3b30
+    Tag       CHAOS
     Highlight glow
     Sound     chime
 
-# Anything with two lines in the top tenth, whatever it is — those are rare enough to look at.
-Show "Two top rolls"
-    TopRolls  >= 2
-    Color     #7cc0ff
-    Tag       TOP2
+# Three exact-top physical identities on a Cyclone weapon.
+Show "Cyclone jackpot"
+    Type      Axe, Sword, Twinblade, Scythe, Spear
+    Stat      Str >= 3
+    Stat      AtkMult >= 5
+    Stat      DamageMelee >= 5
+    Stat      Atk >= 5
+    Stat      AtkSpd >= 10
+    Stat      Crit >= 10
+    Stat      CritDamage >= 10
+    Stat      Hit >= 20
+    Stat      Chain >= 1
+    Stat      DoubleAttack >= 20
+    StatMatches >= 3
+    TopRolls  >= 3
+    Color     #f4d35e
+    Tag       CY3
+    Highlight glow
+    Sound     chime
+
+# Any two exact-top physical identities form a focused weapon.
+Show "Cyclone focused pair"
+    Type      Axe, Sword, Twinblade, Scythe, Spear
+    Stat      Str >= 3
+    Stat      AtkMult >= 5
+    Stat      DamageMelee >= 5
+    Stat      Atk >= 5
+    Stat      AtkSpd >= 10
+    Stat      Crit >= 10
+    Stat      CritDamage >= 10
+    Stat      Hit >= 20
+    Stat      Chain >= 1
+    Stat      DoubleAttack >= 20
+    StatMatches >= 2
+    Color     #e9c46a
+    Tag       CY2
     Highlight glow
 
-# Str is the stat the whole build scales on, so a maxed line matters even on a stray piece.
-Show "Maxed Str"
+# A displayed-max Str line on the correct weapon is still build-defining.
+Show "Max Str weapon"
+    Type      Axe, Sword, Twinblade, Scythe, Spear
+    Stat      Str >= 3
+    Color     #ff9f6b
+    Tag       STR-WPN
+    Highlight mark
+
+# Feet can solve Cyclone's speed requirement without competing with weapon damage.
+Show "Cyclone speed boots"
+    Type      Feet
+    Stat      AtkSpd >= 10
+    Color     #5eead4
+    Tag       SPEED
+    Highlight mark
+
+# Max Str matters on every slot, not only the weapon.
+Show "Max Str gear"
     Stat      Str >= 3
     Color     #c4a5ff
     Tag       STR
     Highlight mark
 
-# Cyclone wants attack speed once Str is handled.
-Show "Attack speed"
-    Stat      AtkSpd >= 6
-    Color     #5eead4
-    Tag       ASPD
+# Rare all-rounders stay visible even when their stats are not Cyclone-focused.
+Show "Three displayed tops"
+    TopRolls  >= 3
+    Color     #7cc0ff
+    Tag       TOP3
+    Highlight glow
+    Sound     ding
+
+Show "Two displayed tops"
+    TopRolls  >= 2
+    Color     #60a5fa
+    Tag       TOP2
     Highlight mark
 
-# The guide refines everything to +9, so a high refine drop saves you real material.
+# The guide refines its set heavily; a high starting refine saves materials.
 Show "Already refined"
     Refine    >= 7
-    Color     #ff9f6b
-    Tag       "+7"
+    Color     #fb923c
+    Tag       +7
+    Highlight mark
+
+# One top-decile physical line is worth inspecting even if it rounds below max.
+Show "Promising physical roll"
+    Stat      Str >= 90%
+    Stat      AtkMult >= 90%
+    Stat      DamageMelee >= 90%
+    Stat      Atk >= 90%
+    Stat      AtkSpd >= 90%
+    Stat      Crit >= 90%
+    Stat      CritDamage >= 90%
+    Stat      Hit >= 90%
+    Stat      Chain >= 90%
+    Stat      DoubleAttack >= 90%
+    StatMatches >= 1
+    HighRolls >= 1
+    Color     #34d399
+    Tag       PHYS?
     Highlight dot
 
-Hide "vendor trash"
-    AvgRollPct < 35
-    HighRolls  < 1
+# A displayed maximum in an off-build stat may still be valuable to another build.
+Show "One displayed top"
+    TopRolls  >= 1
+    Color     #94a3b8
+    Tag       TOP1
+    Highlight dot
+
+Hide "everything"
+

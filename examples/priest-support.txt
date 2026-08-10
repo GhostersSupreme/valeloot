@@ -1,51 +1,147 @@
 # PRIEST — support / tank
 #
-# Based on "Priest - Zero to Hero" by ragnarok, from the SpiritValers build library. That build
-# is a wall: 41,485 HP, 369 Def, 472 Mdef, 30% block, with Matk 360 for heals, running a Life
-# Staff and Arrowcatch Wall behind Knight armour at +10.
+# Based on "Priest - Zero to Hero" by ragnarok, from the SpiritValers build
+# library. The build is a wall: HP, Def, Mdef, block-oriented shielding, and
+# Matk/Int for heals. Raw attack rolls are not promoted merely for being damage.
 #
-# A support filter is not a damage filter. It hunts survivability first and Int second.
+# The cascade distinguishes tank armour, support casting weapons, sustain,
+# general multi-top rarity, and raw-roll potential before hiding leftovers.
 
 Threshold 90
 
 
-# Vit is the stat that build is made of.
-Show "Vit for the wall"
-    Stat      Vit >= 3
-    Color     #4ade80
-    Tag       VIT
+Show "Chaos over-roll"
+    OverRoll
+    Color     #ff3b30
+    Tag       CHAOS
     Highlight glow
     Sound     chime
 
-# Healing scales on Int, so an Int roll on a wand is the other thing worth stopping for.
-Show "Healing gear"
-    Type      Wand, Grimoire, Book
-    Stat      Int >= 3
-    Color     #7cc0ff
-    Tag       HEAL
+# Three exact-top defensive identities on the slots that can roll them.
+Show "Priest wall jackpot"
+    Type      Chest, Shield
+    Stat      Vit >= 3
+    Stat      HpMult >= 10
+    Stat      Def >= 10
+    Stat      Mdef >= 10
+    Stat      DefMult >= 5
+    Stat      MdefMult >= 5
+    Stat      HealingReceived >= 10
+    Stat      PerfectDodge >= 5
+    StatMatches >= 3
+    TopRolls  >= 3
+    Color     #f4d35e
+    Tag       WALL3
+    Highlight glow
+    Sound     chime
+
+Show "Priest wall pair"
+    Type      Chest, Shield
+    Stat      Vit >= 3
+    Stat      HpMult >= 10
+    Stat      Def >= 10
+    Stat      Mdef >= 10
+    Stat      DefMult >= 5
+    Stat      MdefMult >= 5
+    Stat      HealingReceived >= 10
+    Stat      PerfectDodge >= 5
+    StatMatches >= 2
+    Color     #4ade80
+    Tag       WALL2
     Highlight glow
 
-# A shield is a build-defining slot for this one, not a leftover.
-Show "Shields"
+# A casting weapon needs two exact-top support identities, not generic damage.
+Show "Healing caster pair"
+    Type      Wand, Grimoire, Book
+    Stat      Int >= 3
+    Stat      MatkMult >= 5
+    Stat      Matk >= 5
+    Stat      CastSpd >= 10
+    Stat      CooldownRecovery >= 10
+    Stat      Healing >= 10
+    Stat      CastRange >= 1
+    StatMatches >= 2
+    Color     #7cc0ff
+    Tag       HEAL2
+    Highlight glow
+
+Show "Max Int healing weapon"
+    Type      Wand, Grimoire, Book
+    Stat      Int >= 3
+    Color     #60a5fa
+    Tag       INT-WPN
+    Highlight mark
+
+# Shields remain build-defining, but low-quality ones no longer outrank rare gear.
+Show "Top shield"
     Type      Shield
+    TopRolls  >= 1
     Color     #c4a5ff
     Tag       BLOCK
     Highlight mark
 
-Show "Two top rolls"
-    TopRolls  >= 2
+Show "Max Vit gear"
+    Stat      Vit >= 3
+    Color     #22c55e
+    Tag       VIT
+    Highlight mark
+
+Show "Mana sustain"
+    Stat      MpMult >= 2
+    Stat      MpRegenMult >= 25
+    StatMatches >= 1
+    Color     #2dd4bf
+    Tag       MANA
+    Highlight mark
+
+Show "Three displayed tops"
+    TopRolls  >= 3
     Color     #e9c46a
+    Tag       TOP3
+    Highlight glow
+    Sound     ding
+
+Show "Two displayed tops"
+    TopRolls  >= 2
+    Color     #fbbf24
     Tag       TOP2
     Highlight mark
 
-# +10 across the whole build means refine is expensive. Anything pre-refined helps.
+# +10 sets are expensive; high starting refine has independent value.
 Show "Already refined"
     Refine    >= 7
-    Color     #ff9f6b
-    Tag       "+7"
+    Color     #fb923c
+    Tag       +7
+    Highlight mark
+
+# A raw top-decile support line can be valuable before display rounding reaches max.
+Show "Promising support roll"
+    Stat      Vit >= 90%
+    Stat      Int >= 90%
+    Stat      HpMult >= 90%
+    Stat      Def >= 90%
+    Stat      Mdef >= 90%
+    Stat      DefMult >= 90%
+    Stat      MdefMult >= 90%
+    Stat      DamageFromMelee >= 90%
+    Stat      DamageFromMagic >= 90%
+    Stat      HealingReceived >= 90%
+    Stat      PerfectDodge >= 90%
+    Stat      Healing >= 90%
+    Stat      CastSpd >= 90%
+    Stat      CooldownRecovery >= 90%
+    Stat      MpCost >= 90%
+    StatMatches >= 1
+    HighRolls >= 1
+    Color     #34d399
+    Tag       SUP?
     Highlight dot
 
-# A support has no use for raw attack rolls.
-Hide "damage-only junk"
-    AvgRollPct < 40
-    HighRolls  < 1
+Show "One displayed top"
+    TopRolls  >= 1
+    Color     #94a3b8
+    Tag       TOP1
+    Highlight dot
+
+Hide "everything"
+

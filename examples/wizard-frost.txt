@@ -1,49 +1,125 @@
 # WIZARD — frost, tower and bossing
 #
-# Based on "FROST MAGE - TOWER/BOSSING" by danc9399, from the SpiritValers build library:
-# Everfrost Staff +10 with Int gear throughout (Glove_Int, Armor_Int, Feet_Int), 1,256 Matk,
-# 1,952 MP, 169 ASPD. The author notes they are still testing Agi for skill delay.
+# Based on "FROST MAGE - TOWER/BOSSING" by danc9399, from the SpiritValers
+# build library: Everfrost Staff +10, Int gear, high Matk, and enough MP for long
+# tower runs. Agi remains a quiet experimental branch for skill-delay testing.
 #
-# A glass cannon filter: Int, then the wands that carry it, then MP to keep casting.
+# Exact-top caster packages come first, then sustain, general rarity, refine,
+# promising raw rolls, and finally a strict hide fallback.
 
 Threshold 90
 
 
-# Int is the entire build.
-Show "Int for Matk"
-    Stat      Int >= 3
-    Color     #7cc0ff
-    Tag       INT
+Show "Chaos over-roll"
+    OverRoll
+    Color     #ff3b30
+    Tag       CHAOS
     Highlight glow
     Sound     chime
 
-Show "Casting weapon"
+# Three exact-top caster identities on a casting weapon.
+Show "Frost caster jackpot"
     Type      Wand, Grimoire, Book, Instrument
-    Stat      Int >= 90%
+    Stat      Int >= 3
+    Stat      MatkMult >= 5
+    Stat      DamageMagic >= 5
+    Stat      Matk >= 5
+    Stat      CastSpd >= 10
+    Stat      CooldownRecovery >= 10
+    Stat      Healing >= 10
+    Stat      CastRange >= 1
+    StatMatches >= 3
+    TopRolls  >= 3
+    Color     #f4d35e
+    Tag       FROST3
+    Highlight glow
+    Sound     chime
+
+Show "Frost focused pair"
+    Type      Wand, Grimoire, Book, Instrument
+    Stat      Int >= 3
+    Stat      MatkMult >= 5
+    Stat      DamageMagic >= 5
+    Stat      Matk >= 5
+    Stat      CastSpd >= 10
+    Stat      CooldownRecovery >= 10
+    Stat      Healing >= 10
+    Stat      CastRange >= 1
+    StatMatches >= 2
     Color     #e9c46a
-    Tag       CASTER
+    Tag       FROST2
     Highlight glow
 
-# Tower runs are long; MP is the difference between finishing and walking back.
-Show "Mana"
-    Stat      MpMult >= 4
-    Color     #4ade80
-    Tag       MP
+Show "Max Int caster"
+    Type      Wand, Grimoire, Book, Instrument
+    Stat      Int >= 3
+    Color     #ff9f6b
+    Tag       INT-WPN
     Highlight mark
 
-Show "Two top rolls"
-    TopRolls  >= 2
+# Long tower runs reward both larger pools and cheaper or faster recovery.
+Show "Mana sustain"
+    Stat      MpMult >= 2
+    Stat      MpRegenMult >= 25
+    StatMatches >= 1
+    Color     #4ade80
+    Tag       MANA
+    Highlight mark
+
+Show "Max Int gear"
+    Stat      Int >= 3
+    Color     #7cc0ff
+    Tag       INT
+    Highlight mark
+
+Show "Three displayed tops"
+    TopRolls  >= 3
     Color     #c4a5ff
+    Tag       TOP3
+    Highlight glow
+    Sound     ding
+
+Show "Two displayed tops"
+    TopRolls  >= 2
+    Color     #a78bfa
     Tag       TOP2
     Highlight mark
 
-# The author is testing Agi for cast delay — keep an eye out, quietly.
-Show "Agi, being tested"
-    Stat      Agi >= 3
+Show "Already refined"
+    Refine    >= 7
+    Color     #fb923c
+    Tag       +7
+    Highlight mark
+
+# One top-decile caster line is a candidate even when it does not print max.
+Show "Promising caster roll"
+    Stat      Int >= 90%
+    Stat      MatkMult >= 90%
+    Stat      DamageMagic >= 90%
+    Stat      Matk >= 90%
+    Stat      CastSpd >= 90%
+    Stat      CooldownRecovery >= 90%
+    Stat      Healing >= 90%
+    Stat      CastRange >= 90%
+    Stat      MpCost >= 90%
+    StatMatches >= 1
+    HighRolls >= 1
+    Color     #34d399
+    Tag       CAST?
+    Highlight dot
+
+# Agi is intentionally below established caster stats.
+Show "Agi experiment"
+    Stat      Agi >= 90%
     Color     #5eead4
     Tag       AGI?
     Highlight dot
 
-Hide "vendor trash"
-    AvgRollPct < 35
-    HighRolls  < 1
+Show "One displayed top"
+    TopRolls  >= 1
+    Color     #94a3b8
+    Tag       TOP1
+    Highlight dot
+
+Hide "everything"
+
