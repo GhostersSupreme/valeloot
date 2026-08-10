@@ -70,9 +70,20 @@ export interface LootCondition {
   minAvgRoll?: number;
   maxAvgRoll?: number;
   minRefine?: number;
-  /** Required substat lines. */
+  /** Required/candidate substat lines. */
   stats?: StatCondition[];
-  /** Whether every listed stat must be present, or just one. Default 'all'. */
+
+  /**
+   * Minimum/maximum number of listed `stats` entries that must match.
+   * When either is present it replaces `statMode`.
+   */
+  minStatMatches?: number;
+  maxStatMatches?: number;
+
+  /**
+   * Whether every listed stat must be present, or just one. Default 'all'.
+   * Ignored when a StatMatches bound is present.
+   */
   statMode?: 'all' | 'any';
   /** At least this many of the item's stats are ones your worn gear already uses. */
   minSharedStats?: number;
@@ -287,6 +298,10 @@ export function matchesCondition(item: OwnedGear, when: LootCondition, context: 
     if (over !== when.overRoll) return false;
   }
 
+  const boundedStatMatches =
+    when.minStatMatches !== undefined ||
+    when.maxStatMatches !== undefined;
+
   if (when.stats?.length) {
     const mode = when.statMode ?? 'all';
     let hits = 0;
@@ -306,10 +321,30 @@ export function matchesCondition(item: OwnedGear, when: LootCondition, context: 
           || (line!.rollPct !== null && line!.rollPct >= condition.minRollPct))
         && (condition.minValue === undefined || line!.base >= condition.minValue);
       if (ok) hits++;
-      else if (mode === 'all') return false;
+      else if (!boundedStatMatches && mode === 'all') return false;
     }
-    if (mode === 'any' && hits === 0) return false;
-  }
+
+    if (boundedStatMatches) {
+        if (
+            when.minStatMatches !== undefined &&
+            hits < when.minStatMatches
+        ) {
+            return false;
+        }
+
+        if (
+            when.maxStatMatches !== undefined &&
+            hits > when.maxStatMatches
+        ) {
+            return false;
+        }
+    } else if (mode === 'any' && hits === 0) {
+        return false;
+    }
+    } else if (boundedStatMatches) {
+        // Fail closed for programmatically-created rules that bypass the text parser.
+        return false;
+    }
 
   if (when.minSharedStats !== undefined) {
     const worn = context.wornStats;
@@ -377,7 +412,7 @@ function normalizeCondition(input: unknown): LootCondition {
   const raw = (input ?? {}) as Partial<LootCondition>;
   const when: LootCondition = {};
   if (Array.isArray(raw.slotTypes)) when.slotTypes = raw.slotTypes.filter((value): value is string => typeof value === 'string');
-  for (const key of ['minTopRolls', 'maxTopRolls', 'minAvgRoll', 'maxAvgRoll', 'minRefine', 'minSharedStats'] as const) {
+  for (const key of ['minTopRolls', 'maxTopRolls', 'minAvgRoll', 'maxAvgRoll', 'minRefine', 'minSharedStats', 'minStatMatches', 'maxStatMatches'] as const) {
     const value = Number(raw[key]);
     if (Number.isFinite(value)) when[key] = value;
   }

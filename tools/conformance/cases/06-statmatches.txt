@@ -1,0 +1,42 @@
+# StatMatches counts how many of the listed Stat conditions succeed.
+# It replaces the normal AllStats / AnyStat aggregation mode.
+
+Show "at least four stats"
+    Stat      MatkMult >= 5
+    Stat      Matk >= 5
+    Stat      DamageMagic >= 5
+    Stat      CastSpd >= 10
+    Stat      CooldownRecovery >= 10
+    Stat      CastRange >= 1
+    StatMatches >= 4
+    Color     #2fb8ff
+
+Show "exactly three stats"
+    Stat      Str >= 3
+    Stat      Vit >= 3
+    Stat      Agi >= 3
+    Stat      Dex >= 3
+    StatMatches = 3
+    Color     #4ade80
+
+# StatMatches and AnyStat describe conflicting aggregation modes.
+# The whole block should be rejected.
+Show "invalid any plus matches"
+    Stat      Str >= 3
+    Stat      Vit >= 3
+    StatMatches >= 1
+    AnyStat
+    Color     #ef6f6f
+
+# Same conflict, but in the opposite order.
+Show "invalid matches after any"
+    Stat      Str >= 3
+    Stat      Vit >= 3
+    AnyStat
+    StatMatches >= 1
+    Color     #ef6f6f
+
+# There is nothing to count, so this block should also be rejected.
+Show "invalid no candidate stats"
+    StatMatches >= 2
+    Color     #ef6f6f

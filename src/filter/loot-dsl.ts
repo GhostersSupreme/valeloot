@@ -264,6 +264,9 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
   let label: string | undefined;
   let highlight: LootHighlight | undefined;
   let sound: string | undefined;
+  let statModeExplicit = false;
+  let statMatchesLine: number | undefined;
+  let statMatchesText = '';
 
   /**
    * Parse `>= 60` into an inclusive bound.
@@ -339,8 +342,62 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
         stats.push(percent ? { stat: stat!, minRollPct: value } : { stat: stat!, minValue: value });
         break;
       }
-      case 'anystat': when.statMode = 'any'; break;
-      case 'allstats': when.statMode = 'all'; break;
+      case 'anystat':
+        if (statMatchesLine !== undefined) {
+          errors.push({
+            line,
+            text,
+            message: 'AnyStat cannot be combined with StatMatches — StatMatches already defines how listed Stat lines are aggregated',
+          });
+        } else {
+          when.statMode = 'any';
+          statModeExplicit = true;
+        }
+        break;
+
+      case 'allstats':
+        if (statMatchesLine !== undefined) {
+          errors.push({
+            line,
+            text,
+            message: 'AllStats cannot be combined with StatMatches — StatMatches already defines how listed Stat lines are aggregated',
+          });
+        } else {
+          when.statMode = 'all';
+          statModeExplicit = true;
+        }
+        break;
+
+      case 'statmatches': {
+        if (statModeExplicit) {
+          errors.push({
+            line,
+            text,
+            message: 'StatMatches cannot be combined with AnyStat or AllStats',
+          });
+          break;
+        }
+
+        // C#'s Bound() accepts whole numbers only, and a stat count cannot be fractional.
+        if (!/^([<>]=?|=)\s*-?\d+$/.test(remainder)) {
+          errors.push({
+            line,
+            text,
+            message: `StatMatches needs a comparison like ">= 3", got "${remainder}"`,
+          });
+          break;
+        }
+
+        bound(text, line, remainder, true, (min, max) => {
+          if (min !== undefined) when.minStatMatches = min;
+          if (max !== undefined) when.maxStatMatches = max;
+        });
+
+        statMatchesLine = line;
+        statMatchesText = text;
+        break;
+      }
+
       case 'avgroll':
         // INTEGRAL, because the mod compares whole percents. `LootFilter.ItemFacts.AverageRoll`
         // rounds the mean to a whole number, so in game `AvgRoll < 35` excludes an item averaging
@@ -420,6 +477,14 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
 
   if (stats.length) when.stats = stats;
 
+  if (statMatchesLine !== undefined && !stats.length) {
+    errors.push({
+      line: statMatchesLine,
+      text: statMatchesText,
+      message: 'StatMatches requires at least one Stat line in the same block',
+    });
+  }
+
   const rule: LootRule = {
     id: `dsl-${index + 1}`,
     name: block.name,
@@ -490,7 +555,29 @@ export function formatLootFilter(parsed: Pick<ParsedFilter, 'rules' | 'overrides
       else if (stat.minValue !== undefined) out.push(`    Stat      ${stat.stat} >= ${stat.minValue}`);
       else out.push(`    Stat      ${stat.stat} >= 0`);
     }
-    if (w.statMode === 'any') out.push('    AnyStat');
+    const boundedStatMatches =
+      w.minStatMatches !== undefined ||
+      w.maxStatMatches !== undefined;
+
+    if (boundedStatMatches) {
+      if (
+        w.minStatMatches !== undefined &&
+        w.maxStatMatches !== undefined &&
+        w.minStatMatches === w.maxStatMatches
+      ) {
+        out.push(`    StatMatches = ${w.minStatMatches}`);
+      } else {
+        if (w.minStatMatches !== undefined) {
+          out.push(`    StatMatches >= ${w.minStatMatches}`);
+        }
+
+        if (w.maxStatMatches !== undefined) {
+          out.push(`    StatMatches <= ${w.maxStatMatches}`);
+        }
+      }
+    } else if (w.statMode === 'any') {
+      out.push('    AnyStat');
+    }
     if (w.minAvgRoll !== undefined) out.push(`    AvgRoll   ${bound(w.minAvgRoll, '>=', '>')}`);
     if (w.maxAvgRoll !== undefined) out.push(`    AvgRoll   ${bound(w.maxAvgRoll, '<=', '<')}`);
     if (w.minTopRolls !== undefined) out.push(`    TopRolls  >= ${w.minTopRolls}`);

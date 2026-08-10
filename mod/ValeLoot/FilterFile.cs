@@ -205,6 +205,7 @@ internal static class FilterFile
 #   AvgRoll    < 35       average roll quality across its lines, in percent
 #   Stat       Agi >= 90% that stat's line rolled in the top tenth of its range
 #   Stat       Agi >= 3   that stat PRINTS at least 3 on this item
+#   StatMatches >= 3      at least three of the listed Stat conditions must match
 #   OverRoll              a line above its normal maximum — only a Chaos widen does that
 #   Refine     >= 5       refine level at least this
 #   Favorite              the star you put on it in game

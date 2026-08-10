@@ -606,6 +606,7 @@ function matchesCondition(item, when, context) {
     if (over !== when.overRoll)
       return false;
   }
+  const boundedStatMatches = when.minStatMatches !== undefined || when.maxStatMatches !== undefined;
   if (when.stats?.length) {
     const mode = when.statMode ?? "all";
     let hits = 0;
@@ -615,11 +616,21 @@ function matchesCondition(item, when, context) {
       const ok = Boolean(line) && (condition.minRollPct === undefined || line.rollPct !== null && line.rollPct >= condition.minRollPct) && (condition.minValue === undefined || line.base >= condition.minValue);
       if (ok)
         hits++;
-      else if (mode === "all")
+      else if (!boundedStatMatches && mode === "all")
         return false;
     }
-    if (mode === "any" && hits === 0)
+    if (boundedStatMatches) {
+      if (when.minStatMatches !== undefined && hits < when.minStatMatches) {
+        return false;
+      }
+      if (when.maxStatMatches !== undefined && hits > when.maxStatMatches) {
+        return false;
+      }
+    } else if (mode === "any" && hits === 0) {
       return false;
+    }
+  } else if (boundedStatMatches) {
+    return false;
   }
   if (when.minSharedStats !== undefined) {
     const worn = context.wornStats;
@@ -762,6 +773,9 @@ function parseRuleBlock(block, index) {
   let label;
   let highlight;
   let sound;
+  let statModeExplicit = false;
+  let statMatchesLine;
+  let statMatchesText = "";
   const bound = (text, line, remainder, integral, apply) => {
     const match = /^([<>]=?|=)\s*(-?\d+(?:\.\d+)?)$/.exec(remainder);
     if (!match) {
@@ -821,11 +835,56 @@ function parseRuleBlock(block, index) {
         break;
       }
       case "anystat":
-        when.statMode = "any";
+        if (statMatchesLine !== undefined) {
+          errors.push({
+            line,
+            text,
+            message: "AnyStat cannot be combined with StatMatches — StatMatches already defines how listed Stat lines are aggregated"
+          });
+        } else {
+          when.statMode = "any";
+          statModeExplicit = true;
+        }
         break;
       case "allstats":
-        when.statMode = "all";
+        if (statMatchesLine !== undefined) {
+          errors.push({
+            line,
+            text,
+            message: "AllStats cannot be combined with StatMatches — StatMatches already defines how listed Stat lines are aggregated"
+          });
+        } else {
+          when.statMode = "all";
+          statModeExplicit = true;
+        }
         break;
+      case "statmatches": {
+        if (statModeExplicit) {
+          errors.push({
+            line,
+            text,
+            message: "StatMatches cannot be combined with AnyStat or AllStats"
+          });
+          break;
+        }
+        if (!/^([<>]=?|=)\s*-?\d+$/.test(remainder)) {
+          errors.push({
+            line,
+            text,
+            message: `StatMatches needs a comparison like ">= 3", got "${remainder}"`
+          });
+          break;
+        }
+        bound(text, line, remainder, true, (min, max) => {
+          if (min !== undefined)
+            when.minStatMatches = min;
+          if (max !== undefined)
+            when.maxStatMatches = max;
+        });
+        statMatchesLine = line;
+        statMatchesText = text;
+        break;
+      }
       case "avgroll":
         bound(text, line, remainder, true, (min, max) => {
           if (min !== undefined)
@@ -928,6 +987,13 @@ function parseRuleBlock(block, index) {
   }
   if (stats.length)
     when.stats = stats;
+  if (statMatchesLine !== undefined && !stats.length) {
+    errors.push({
+      line: statMatchesLine,
+      text: statMatchesText,
+      message: "StatMatches requires at least one Stat line in the same block"
+    });
+  }
   const rule = {
     id: `dsl-${index + 1}`,
     name: block.name,
@@ -981,8 +1047,21 @@ function formatLootFilter(parsed) {
       else
         out.push(`    Stat      ${stat.stat} >= 0`);
     }
-    if (w.statMode === "any")
+    const boundedStatMatches = w.minStatMatches !== undefined || w.maxStatMatches !== undefined;
+    if (boundedStatMatches) {
+      if (w.minStatMatches !== undefined && w.maxStatMatches !== undefined && w.minStatMatches === w.maxStatMatches) {
+        out.push(`    StatMatches = ${w.minStatMatches}`);
+      } else {
+        if (w.minStatMatches !== undefined) {
+          out.push(`    StatMatches >= ${w.minStatMatches}`);
+        }
+        if (w.maxStatMatches !== undefined) {
+          out.push(`    StatMatches <= ${w.maxStatMatches}`);
+        }
+      }
+    } else if (w.statMode === "any") {
       out.push("    AnyStat");
+    }
     if (w.minAvgRoll !== undefined)
       out.push(`    AvgRoll   ${bound(w.minAvgRoll, ">=", ">")}`);
     if (w.maxAvgRoll !== undefined)
@@ -1079,6 +1158,7 @@ const CONDITIONS = [
   ['Name', 'name(s) or id(s), comma separated — any one matching is enough'],
   ['Type', 'item type(s), comma separated'],
   ['Stat', 'Agi >= 3 (the printed value) or Agi >= 90% (roll quality)'],
+  ['StatMatches', 'how many listed Stat conditions must match, e.g. >= 3'],
   ['AvgRoll', 'average roll %, e.g. < 35'],
   ['TopRolls', 'how many lines are top rolls, e.g. >= 2'],
   ['Refine', 'refine level, e.g. >= 1 — minimum only'],

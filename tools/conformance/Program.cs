@@ -124,6 +124,8 @@ internal static class Program
             .Append(", \"maxTopRolls\": ").Append(Int(when.MaxTopRolls))
             .Append(", \"minAvgRoll\": ").Append(Int(when.MinAvgRoll))
             .Append(", \"maxAvgRoll\": ").Append(Int(when.MaxAvgRoll))
+            .Append(", \"minStatMatches\": ").Append(Int(when.MinStatMatches))
+            .Append(", \"maxStatMatches\": ").Append(Int(when.MaxStatMatches))
             .Append(", \"statsAll\": ").Append(when.StatsAll ? "true" : "false")
             .Append(", \"hasChaos\": ").Append(Bool(when.HasChaos))
             .Append(", \"favorite\": ").Append(Bool(when.Favorite))
