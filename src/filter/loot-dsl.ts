@@ -477,6 +477,24 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
 
   if (stats.length) when.stats = stats;
 
+  if (statMatchesLine !== undefined && stats.length) {
+    const min = when.minStatMatches;
+    const max = when.maxStatMatches;
+    let message: string | undefined;
+
+    if ((min !== undefined && min < 0) || (max !== undefined && max < 0)) {
+      message = 'StatMatches cannot be negative';
+    } else if (min !== undefined && max !== undefined && min > max) {
+      message = `StatMatches minimum ${min} cannot exceed maximum ${max}`;
+    } else if (min !== undefined && min > stats.length) {
+      message = `StatMatches cannot require ${min} matches from only ${stats.length} Stat line(s)`;
+    }
+
+    if (message) {
+      errors.push({ line: statMatchesLine, text: statMatchesText, message });
+    }
+  }
+
   if (statMatchesLine !== undefined && !stats.length) {
     errors.push({
       line: statMatchesLine,

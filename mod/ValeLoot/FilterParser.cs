@@ -534,6 +534,32 @@ internal static class FilterParser
 
         if (stats.Count > 0) when.Stats = stats.ToArray();
 
+        if (statMatchesLine is int boundsLine && stats.Count > 0)
+        {
+            int? min = when.MinStatMatches;
+            int? max = when.MaxStatMatches;
+            string? message = null;
+
+            if ((min is int minimum && minimum < 0) ||
+                (max is int maximum && maximum < 0))
+            {
+                message = "StatMatches cannot be negative";
+            }
+            else if (min is int lower && max is int upper && lower > upper)
+            {
+                message = $"StatMatches minimum {lower} cannot exceed maximum {upper}";
+            }
+            else if (min is int required && required > stats.Count)
+            {
+                message = $"StatMatches cannot require {required} matches from only {stats.Count} Stat line(s)";
+            }
+
+            if (message is not null)
+            {
+                errors.Add(new FilterError(boundsLine, statMatchesText, message));
+            }
+        }
+
         if (statMatchesLine is int matchesLine && stats.Count == 0)
         {
             errors.Add(new FilterError(

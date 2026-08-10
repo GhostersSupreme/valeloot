@@ -1,0 +1,68 @@
+# Focused StatMatches sample derived from ValeLoot_Category_General_v3.txt.
+# This is deliberately a SAMPLE, not the full classifier: it compresses the repeated two-top
+# pair permutations into four readable rules. First match wins.
+
+# Any two exact-top physical identities. This replaces dozens of ATK pair blocks.
+Show "ATK — 2 focused tops"
+    Stat      Atk >= 5
+    Stat      AtkMult >= 5
+    Stat      DamageMelee >= 5
+    Stat      DamageRanged >= 5
+    Stat      Crit >= 10
+    Stat      CritDamage >= 10
+    Stat      Hit >= 20
+    Stat      Chain >= 1
+    Stat      DoubleAttack >= 20
+    Stat      AtkSpd >= 10
+    StatMatches >= 2
+    Color     #ff5a5f
+    Tag       ATK-2
+    Highlight mark
+
+# Any two exact-top magic identities.
+Show "MAGIC — 2 focused tops"
+    Stat      Matk >= 5
+    Stat      MatkMult >= 5
+    Stat      DamageMagic >= 5
+    Stat      CastSpd >= 10
+    Stat      CastRange >= 1
+    Stat      Healing >= 10
+    StatMatches >= 2
+    Color     #2fb8ff
+    Tag       MAG-2
+    Highlight mark
+
+# Chest/shield defensive pairing, including mixed physical and magic defense.
+Show "TANK — 2 focused tops"
+    Type      Chest, Shield
+    Stat      Def >= 10
+    Stat      DefMult >= 5
+    Stat      Mdef >= 10
+    Stat      MdefMult >= 5
+    Stat      HealingReceived >= 10
+    Stat      PerfectDodge >= 5
+    StatMatches >= 2
+    Color     #52d273
+    Tag       TANK-2
+    Highlight mark
+
+# Accessory all-rounder fallback using the source file's accessory maxima.
+Show "GENERAL — 2 accessory tops"
+    Type      Accessory
+    Stat      Str >= 3
+    Stat      Vit >= 3
+    Stat      Dex >= 3
+    Stat      Agi >= 3
+    Stat      Int >= 3
+    Stat      Luk >= 3
+    Stat      HpMult >= 2
+    Stat      MpMult >= 2
+    Stat      AtkMult >= 2
+    Stat      MatkMult >= 2
+    Stat      Crit >= 5
+    Stat      Hit >= 10
+    Stat      AtkSpd >= 5
+    StatMatches >= 2
+    Color     #c7d0dc
+    Tag       GEN-2
+    Highlight dot

@@ -413,7 +413,9 @@ function normalizeCondition(input: unknown): LootCondition {
   const when: LootCondition = {};
   if (Array.isArray(raw.slotTypes)) when.slotTypes = raw.slotTypes.filter((value): value is string => typeof value === 'string');
   for (const key of ['minTopRolls', 'maxTopRolls', 'minAvgRoll', 'maxAvgRoll', 'minRefine', 'minSharedStats', 'minStatMatches', 'maxStatMatches'] as const) {
-    const value = Number(raw[key]);
+    const rawValue = raw[key];
+    if (rawValue === null || rawValue === undefined) continue;
+    const value = Number(rawValue);
     if (Number.isFinite(value)) when[key] = value;
   }
   if (typeof raw.overRoll === 'boolean') when.overRoll = raw.overRoll;

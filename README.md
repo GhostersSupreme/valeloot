@@ -182,6 +182,9 @@ Show "Magic four-of-six"
 
 `StatMatches` supports `>=`, `>`, `=`, `<=`, and `<`. It cannot be combined with `AnyStat` or
 `AllStats`, because all three specify how the listed `Stat` lines are combined.
+Counts are non-negative. A minimum cannot exceed the number of listed `Stat` lines, and when two
+`StatMatches` lines form a range, the minimum cannot exceed the maximum. Invalid blocks are rejected
+instead of becoming rules that can never match.
 
 You never have to guess a spelling. ValeLoot writes every item and stat name the game knows to
 `valeloot-items.txt`, and refreshes it when the game gets new content.

@@ -40,3 +40,24 @@ Show "invalid matches after any"
 Show "invalid no candidate stats"
     StatMatches >= 2
     Color     #ef6f6f
+
+# Counts cannot be negative.
+Show "invalid negative matches"
+    Stat      Str >= 3
+    StatMatches >= -1
+    Color     #ef6f6f
+
+# A rule cannot require more successful conditions than it lists.
+Show "invalid impossible minimum"
+    Stat      Str >= 3
+    Stat      Vit >= 3
+    StatMatches >= 3
+    Color     #ef6f6f
+
+# Multiple StatMatches lines form a range, which still has to be satisfiable.
+Show "invalid reversed range"
+    Stat      Str >= 3
+    Stat      Vit >= 3
+    StatMatches >= 2
+    StatMatches <= 1
+    Color     #ef6f6f

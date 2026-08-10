@@ -79,6 +79,9 @@ jobs:
             --moduleResolution bundler --allowImportingTsExtensions \
             src/filter/loot-dsl.ts src/filter/loot-filter.ts
 
+      - name: Test StatMatches behavior
+        run: bun test tools/conformance/statmatches.test.ts
+
       # The language has two implementations — the mod's C# parser, which decides what your bag
       # actually looks like, and the editor's TypeScript one, which tells you what it will look
       # like. Nothing kept them honest until this ran, and its first run found two real

@@ -43,6 +43,11 @@ const steps: readonly Step[] = [
     meaning: 'the vendored parser does not type-check; nothing else would notice',
   },
   {
+    name: 'StatMatches behavior',
+    argv: ['bun', 'test', 'tools/conformance/statmatches.test.ts'],
+    meaning: 'the StatMatches parser or evaluator contract is broken',
+  },
+  {
     name: 'filter language conformance',
     argv: ['bun', 'tools/conformance/run.ts'],
     meaning: 'the mod and the editor read the same filter file differently',
