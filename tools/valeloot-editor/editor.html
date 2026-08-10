@@ -579,15 +579,16 @@ const KEYWORDS = [
   ['Hide', 'claim matching items, then say nothing about them'],
   ['AlwaysShow', 'always light this item up, by name — beats every rule'],
   ['AlwaysHide', 'never light this item, by name — beats every rule'],
-  ['Threshold', 'what counts as a top roll, e.g. 90 — once, at the top'],
+  ['Threshold', 'raw-roll cutoff used by HighRolls, e.g. 90 — once, at the top'],
 ];
 const CONDITIONS = [
   ['Name', 'name(s) or id(s), comma separated — any one matching is enough'],
   ['Type', 'item type(s), comma separated'],
   ['Stat', 'Agi >= 3 (the printed value) or Agi >= 90% (roll quality)'],
   ['StatMatches', 'how many listed Stat conditions must match, e.g. >= 3'],
-  ['AvgRoll', 'average roll %, e.g. < 35'],
-  ['TopRolls', 'how many lines are top rolls, e.g. >= 2'],
+  ['AvgRollPct', 'average hidden roll percentage, e.g. < 35'],
+  ['TopRolls', 'how many lines print their legal maximum, e.g. >= 2'],
+  ['HighRolls', 'how many raw rolls reach Threshold, e.g. >= 2'],
   ['Refine', 'refine level, e.g. >= 1 — minimum only'],
   ['Favorite', "the game's own favourite flag"],
   ['NotFavorite', 'everything you have not flagged'],
@@ -675,8 +676,8 @@ const STARTER = [
   '    Highlight mark',
   '',
   'Hide "vendor trash"',
-  '    AvgRoll   < 35',
-  '    TopRolls  < 1',
+  '    AvgRollPct < 35',
+  '    HighRolls  < 1',
   '',
 ].join('\n');
 
@@ -768,10 +769,10 @@ function modLint(text) {
  * There are two ways this page gets a bag now — the mod's own `/api/state` JSON when the mod is
  * serving this page over loopback, and the TSV `valeloot-bag.txt` when the page was opened as a
  * file — and they must produce the SAME item, or every renderer below has to learn the difference.
- * So each reader decodes only its own transport, down to the same middle shape
- * `{ uid, itemId, name, type, refine, favorite, topRolls, avgRoll, lines: [{ stat, roll, printed }] }`,
- * and this is the ONLY place that turns that into what the bundled matcher takes. One reader gaining
- * a field it forgot to normalise is the bug this arrangement exists to make impossible.
+ * So each reader decodes only its own transport into:
+ * `{ uid, itemId, name, type, refine, favorite, topRolls, highRolls, avgRollPct,
+ *    lines: [{ stat, roll, printed }] }`.
+ * This is the only place that turns that shape into what the bundled matcher takes.
  *
  * The roll is NOT clamped to 100 — the game itself lets a chaos widen exceed the cap, and a roll
  * above 100 is exactly what `OverRoll` asks about.
@@ -798,7 +799,8 @@ function bagItem(raw, index) {
       over: Number.isFinite(roll) && roll > 100,
     });
   }
-  const avg = raw.avgRoll === null || raw.avgRoll === undefined ? NaN : Number(raw.avgRoll);
+  const avg = raw.avgRollPct === null || raw.avgRollPct === undefined ? NaN : Number(raw.avgRollPct);
+  const top = raw.topRolls === null || raw.topRolls === undefined ? NaN : Number(raw.topRolls);
   return {
     wireIndex: index,
     uid: raw.uid || null,
@@ -811,10 +813,9 @@ function bagItem(raw, index) {
     slot: null,
     refine: Number(raw.refine) || 0,
     favorite: raw.favorite === true || raw.favorite === 1 || raw.favorite === '1',
-    // What the mod counted, against the threshold it counted at. `evaluate` recounts it when the
-    // filter being edited asks for a different one — see there.
-    topRolls: Number(raw.topRolls) || 0,
-    avgRoll: Number.isFinite(avg) ? avg : null,
+    topRolls: Number.isFinite(top) ? top : null,
+    highRolls: Number(raw.highRolls) || 0,
+    avgRollPct: Number.isFinite(avg) ? avg : null,
     cards: [],
     lines,
     luck: { p: null, oneIn: null },
@@ -824,9 +825,10 @@ function bagItem(raw, index) {
 }
 
 /**
- * Reader one: `valeloot-bag.txt` version 1 — what a page opened from the filesystem gets.
+ * Reader one: `valeloot-bag.txt` — what a page opened from the filesystem gets.
  *
- * TAB separated, nine columns, `#` comments; `-` means "the mod could not supply this".
+ * Version 2 adds distinct displayed `topRolls`, raw `highRolls` and `avgRollPct` columns.
+ * Version 1 remains readable, but its threshold count cannot answer displayed `TopRolls`.
  */
 function parseBag(text) {
   const items = [];
@@ -846,11 +848,13 @@ function parseBag(text) {
       continue;
     }
     const cols = line.split('\t');
-    if (cols.length < 9) { malformed++; continue; }
+    const v2 = version !== null && version >= 2;
+    const statsAt = v2 ? 9 : 8;
+    if (cols.length <= statsAt) { malformed++; continue; }
     const dash = (value) => (value === '-' || value === '' || value === undefined ? null : value);
     const lines = [];
-    if (dash(cols[8])) {
-      for (const entry of cols[8].split(',')) {
+    if (dash(cols[statsAt])) {
+      for (const entry of cols[statsAt].split(',')) {
         const bits = entry.split(':');
         if (bits.length < 2) continue;
         lines.push({ stat: bits[0], roll: bits[1], printed: dash(bits[2]) });
@@ -858,10 +862,14 @@ function parseBag(text) {
     }
     items.push(bagItem({
       uid: dash(cols[0]), itemId: dash(cols[1]), name: dash(cols[2]), type: dash(cols[3]),
-      refine: cols[4], favorite: cols[5] === '1', topRolls: cols[6], avgRoll: dash(cols[7]), lines,
+      refine: cols[4], favorite: cols[5] === '1',
+      topRolls: v2 ? dash(cols[6]) : null,
+      highRolls: v2 ? cols[7] : cols[6],
+      avgRollPct: dash(v2 ? cols[8] : cols[7]),
+      lines,
     }, items.length));
   }
-  // `countedAt` is which threshold the `topRolls` column currently answers for; `evaluate` moves it.
+  // `countedAt` records which threshold the `highRolls` column answers for.
   return { items, threshold, countedAt: threshold, stamp, version, malformed, loaded: true };
 }
 
@@ -1002,19 +1010,15 @@ function evaluate(text) {
   const context = { threshold };
 
   /**
-   * `topRolls` in the snapshot was counted against the threshold the GAME last loaded.
-   *
-   * Change `Threshold` in the editor and that column is answering a different question, so every
-   * `TopRolls` count on screen would be stale until the player saved and reopened their bag. The
-   * roll values are in the file, so it is recounted here instead — the mod itself rewrites the
-   * column on the pass after a save, which is the same arithmetic.
+   * `highRolls` depends on the editable Threshold. Recount it from raw lines when the filter asks
+   * for a different cutoff; `topRolls` is catalog-backed and threshold-independent.
    */
   const recounted = bag.loaded && bag.threshold !== null && threshold !== bag.countedAt;
   if (recounted) {
     for (const item of bag.items) {
-      let top = 0;
-      for (const line of item.lines) if (line.rollPct !== null && line.rollPct >= threshold) top++;
-      item.topRolls = top;
+      let high = 0;
+      for (const line of item.lines) if (line.rollPct !== null && line.rollPct >= threshold) high++;
+      item.highRolls = high;
     }
     bag.countedAt = threshold;
   }
@@ -1331,7 +1335,7 @@ function ruleRow(block, index) {
         + '<span class="n">' + esc(item.name) + '</span>'
         + '<span class="r">' + (item.refine ? '<span>+' + item.refine + '</span>' : '')
         + (item.topRolls ? '<u>\u2605' + item.topRolls + '</u>' : '')
-        + '<span>' + (item.avgRoll === null ? '\u2014' : Math.round(item.avgRoll) + '%') + '</span></span>'
+        + '<span>' + (item.avgRollPct === null ? '\u2014' : Math.round(item.avgRollPct) + '%') + '</span></span>'
         + '<span class="st">' + statLine(item) + '</span></div>').join('');
       if (block.caught.length > 14) html += '<p class="empty">+ ' + (block.caught.length - 14) + ' more</p>';
     } else {
@@ -1352,7 +1356,7 @@ const TEMPLATES = {
   top: 'Show "Top rolls"\n    TopRolls  >= 2\n    Highlight mark',
   stat: 'Show "A stat I want"\n    Stat      Agi >= 90%\n    Highlight mark',
   shout: 'Show "Shout about these"\n    TopRolls  >= 3\n    Highlight glow\n    Sound     chime',
-  quiet: 'Hide "vendor trash"\n    AvgRoll   < 35\n    TopRolls  < 1',
+  quiet: 'Hide "vendor trash"\n    AvgRollPct < 35\n    HighRolls  < 1',
 };
 
 function renderCascade() {
@@ -2296,8 +2300,11 @@ function renderAct() {
   host.className = 'on';
   host.innerHTML = '<div class="top"><h3>' + esc(item.name) + '</h3>'
     + '<span class="meta">' + esc(item.slotType) + (item.refine ? ' · +' + item.refine : '')
-    + ' · ' + item.topRolls + ' top roll' + (item.topRolls === 1 ? '' : 's')
-    + ' · ' + (item.avgRoll === null ? 'no average' : Math.round(item.avgRoll) + '% average')
+    + (item.topRolls === null ? ' · top rolls unresolved'
+      : ' · ' + item.topRolls + ' top roll' + (item.topRolls === 1 ? '' : 's'))
+    + ' · ' + item.highRolls + ' high roll' + (item.highRolls === 1 ? '' : 's')
+    + ' at ' + (plan ? plan.threshold : 90) + '%'
+    + ' · ' + (item.avgRollPct === null ? 'no average' : Math.round(item.avgRollPct) + '% average')
     + ' · ' + esc(claim) + '</span></div>'
     + '<div class="row"><span class="lbl">rule from this</span>'
     + '<button class="mk" data-mk="name">Name <b>"' + esc(item.name) + '"</b></button>'
@@ -2347,8 +2354,10 @@ function showNote(event, item) {
   html += '<h4>' + esc(item.name) + '</h4>'
     + '<div class="meta">' + esc(item.slotType) + (item.refine ? ' · +' + item.refine : '')
     + (item.favorite ? ' · favourited' : '')
-    + ' · ' + (item.avgRoll === null ? 'no average' : Math.round(item.avgRoll) + '% avg')
-    + ' · ' + item.topRolls + ' top roll' + (item.topRolls === 1 ? '' : 's')
+    + ' · ' + (item.avgRollPct === null ? 'no average' : Math.round(item.avgRollPct) + '% avg')
+    + (item.topRolls === null ? ' · top rolls unresolved'
+      : ' · ' + item.topRolls + ' top roll' + (item.topRolls === 1 ? '' : 's'))
+    + ' · ' + item.highRolls + ' high roll' + (item.highRolls === 1 ? '' : 's')
     + ' <span class="rollhi">(at ' + (plan ? plan.threshold : 90) + '%)</span></div>';
   html += '<div class="st">' + (item.lines.length
     ? item.lines.map((l) => esc(l.stat) + ' ' + (l.printed === null ? '<s>?</s>' : '+' + l.printed)

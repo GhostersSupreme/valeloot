@@ -271,9 +271,9 @@ Rules are tried **in order** and the **first match wins**, so specific rules go 
 ones at the bottom. That ordering is the whole trick: you stop thinking about overlap.
 
 ```
-Threshold 90                    # what counts as a "top roll" for TopRolls, in percent
+Threshold 90                    # raw-roll cutoff used by HighRolls
 
-Show "Triple top roll"
+Show "Triple displayed top"
     TopRolls  >= 3
     Color     #f472b6
     Tag       TRIPLE
@@ -290,7 +290,8 @@ Show "Enough AGI to bother"
     Highlight dot
 
 Hide "rolled badly"
-    AvgRoll   < 35
+    AvgRollPct < 35
+    HighRolls  < 1
 
 AlwaysShow "Spirit Ward", "Windborne Rune"
 AlwaysHide "Rusty Dagger"
@@ -308,12 +309,14 @@ All optional, and all must hold for the block to match.
 | `Name Kunai` | part of the item's name, its catalog id, or the text on the cell. Case-insensitive. |
 | `Name "Buzzing Hive Fragment", "Abyssal Idol"` | comma-separated means **any** of them — one rule, one colour, one sound |
 | `Type Accessory, Rifle` | the item's type. Comma-separated means any of them. |
-| `Type Card, Gem, Consumable, Junk` | the kinds the game gives no type enum; ValeLoot names them |
+| `Type Artifact, Card, Gem, Consumable, Junk` | whole non-equipment kinds named by ValeLoot |
 | `Stat Agi >= 90%` | that substat line rolled in the top 10% of its range |
 | `Stat Agi >= 3` | that substat **prints** at least +3 on this item |
 | `AnyStat` | one `Stat` line is enough (default: every `Stat` line must match) |
-| `TopRolls >= 3` | at least three lines at or above `Threshold` |
-| `AvgRoll < 35` | mean roll across the item's lines, as a whole percent |
+| `TopRolls >= 3` | at least three lines print their legal maximum; over-rolls count |
+| `HighRolls >= 3` | at least three hidden raw rolls reach `Threshold` |
+| `AvgRollPct < 35` | mean hidden roll percentage across the item's lines |
+| `AvgRoll < 35` | backward-compatible alias for `AvgRollPct` |
 | `Refine >= 5` | refine level at least this |
 | `OverRoll` / `NoOverRoll` | has a line that rolled past 100% — the chaos over-roll |
 | `Chaos` / `NoChaos` | has a chaos type, or has not |
@@ -343,13 +346,13 @@ to its maximum, so a line that rolled 0% still prints a respectable number: on a
 shift your filter slightly; it inverts it.
 
 The printed value needs that item's base cap, which ValeLoot reads from the game's own config
-database in memory — see [Generated files](#generated-files). That data is not loaded when the
-plugin starts, so until `catalog ready` appears in the log, a rule using the bare form **matches
-nothing** and says so in the log once. It is never quietly treated as satisfied: that would widen the
-rule to your whole bag.
+database in memory for equipment and artifacts — see [Generated files](#generated-files). That data
+is not loaded when the plugin starts, so until `catalog ready` appears in the log, a rule using the
+bare form or `TopRolls` **matches nothing** and says so in the log once. It is never quietly treated
+as satisfied: that would widen the rule to your whole bag.
 
-`Threshold 90` sets what `TopRolls` counts as a top roll, in percent. It affects `TopRolls` and
-nothing else — not `Stat`, not `AvgRoll`.
+`Threshold 90` sets the raw-roll cutoff for `HighRolls`. It affects `HighRolls` and nothing else —
+not `TopRolls`, `Stat`, or `AvgRollPct`.
 
 `SharedStats` and `Verdict` are refused with a message: they ask about the gear you are wearing,
 which this build does not read. `Unknown` and `Known` are refused too — they ask whether a reference

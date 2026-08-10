@@ -63,12 +63,16 @@ export interface StatCondition {
 export interface LootCondition {
   /** Item types this rule applies to (`Chest`, `Pistol`, …). Empty/absent = any. */
   slotTypes?: string[];
-  /** At least this many lines at or above the inventory threshold. */
+  /** At least this many lines print their legal maximum value. */
   minTopRolls?: number;
-  /** At most this many. `maxTopRolls: 0` is "nothing good on it" — the core of any trash rule. */
+  /** At most this many displayed-max lines. */
   maxTopRolls?: number;
-  minAvgRoll?: number;
-  maxAvgRoll?: number;
+  /** At least this many hidden raw rolls reach `Threshold`. */
+  minHighRolls?: number;
+  /** At most this many hidden raw rolls reach `Threshold`. */
+  maxHighRolls?: number;
+  minAvgRollPct?: number;
+  maxAvgRollPct?: number;
   minRefine?: number;
   /** Required/candidate substat lines. */
   stats?: StatCondition[];
@@ -232,7 +236,7 @@ export function defaultLootRules(): LootRule[] {
     {
       id: 'mystat', name: 'Rolls my stats well', enabled: true, color: '#a78bfa', label: 'MINE',
       highlight: 'mark',
-      when: { minSharedStats: 2, minAvgRoll: 60 },
+      when: { minSharedStats: 2, minAvgRollPct: 60 },
     },
     {
       id: 'unknown', name: 'Not in the wiki', enabled: true, color: '#f0b429', label: 'NEW?',
@@ -242,7 +246,7 @@ export function defaultLootRules(): LootRule[] {
     {
       id: 'vendor', name: 'Vendor / essence fodder', enabled: true, color: '#6b7a73', label: 'JUNK',
       highlight: 'dot',
-      when: { maxAvgRoll: 35, minTopRolls: 0 },
+      when: { maxAvgRollPct: 35, maxHighRolls: 0 },
     },
   ];
 }
@@ -273,15 +277,19 @@ export function matchLoot(item: OwnedGear, rules: readonly LootRule[], context: 
 
 export function matchesCondition(item: OwnedGear, when: LootCondition, context: LootContext): boolean {
   if (when.slotTypes?.length && !when.slotTypes.includes(item.slotType)) return false;
-  if (when.minTopRolls !== undefined && item.topRolls < when.minTopRolls) return false;
-  if (when.maxTopRolls !== undefined && item.topRolls > when.maxTopRolls) return false;
+  if ((when.minTopRolls !== undefined || when.maxTopRolls !== undefined) && item.topRolls === null) return false;
+  if (when.minTopRolls !== undefined && item.topRolls! < when.minTopRolls) return false;
+  if (when.maxTopRolls !== undefined && item.topRolls! > when.maxTopRolls) return false;
+  if (when.minHighRolls !== undefined && item.highRolls < when.minHighRolls) return false;
+  if (when.maxHighRolls !== undefined && item.highRolls > when.maxHighRolls) return false;
   if (when.minRefine !== undefined && item.refine < when.minRefine) return false;
   if (when.unknown !== undefined && Boolean(item.unknown) !== when.unknown) return false;
   if (when.favorite !== undefined && item.favorite !== when.favorite) return false;
 
-  if (when.minAvgRoll !== undefined && (item.avgRoll ?? -1) < when.minAvgRoll) return false;
+  if (when.minAvgRollPct !== undefined && (item.avgRollPct ?? -1) < when.minAvgRollPct) return false;
   // An unplaceable average must not slip through a "junk" ceiling — treat it as unknown, not as 0.
-  if (when.maxAvgRoll !== undefined && (item.avgRoll === null || item.avgRoll > when.maxAvgRoll)) return false;
+  if (when.maxAvgRollPct !== undefined
+      && (item.avgRollPct === null || item.avgRollPct > when.maxAvgRollPct)) return false;
 
   if (when.names?.length) {
     const name = item.name.toLowerCase();
@@ -412,7 +420,11 @@ function normalizeCondition(input: unknown): LootCondition {
   const raw = (input ?? {}) as Partial<LootCondition>;
   const when: LootCondition = {};
   if (Array.isArray(raw.slotTypes)) when.slotTypes = raw.slotTypes.filter((value): value is string => typeof value === 'string');
-  for (const key of ['minTopRolls', 'maxTopRolls', 'minAvgRoll', 'maxAvgRoll', 'minRefine', 'minSharedStats', 'minStatMatches', 'maxStatMatches'] as const) {
+  for (const key of [
+    'minTopRolls', 'maxTopRolls', 'minHighRolls', 'maxHighRolls',
+    'minAvgRollPct', 'maxAvgRollPct', 'minRefine', 'minSharedStats',
+    'minStatMatches', 'maxStatMatches',
+  ] as const) {
     const rawValue = raw[key];
     if (rawValue === null || rawValue === undefined) continue;
     const value = Number(rawValue);

@@ -149,7 +149,7 @@ internal static class ItemReader
         if (!StatsReadable)
         {
             log($"item reader: substats unreadable (StatData.Type {_statType}, StatData.Value {_statValue}, "
-              + $"{_statNames.Count} StatType names) — Stat/TopRolls/AvgRoll cannot match this session");
+              + $"{_statNames.Count} StatType names) — Stat/TopRolls/HighRolls/AvgRollPct cannot match this session");
         }
 
         Installed = true;

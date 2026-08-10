@@ -151,11 +151,14 @@ internal static class InventoryWatch
         public int Offset;
         /// <summary>`Count`'s offset on the value class: -1 for "does not stack, or not seen yet".</summary>
         public int Stack;
+        /// <summary>ValeLoot's canonical type for data-only matching, empty when none is defined.</summary>
+        public readonly string Type;
 
-        public Bag(string field, bool required)
+        public Bag(string field, bool required, string type = "")
         {
             Field = field;
             Required = required;
+            Type = type;
             Offset = -1;
             Stack = -1;
         }
@@ -178,7 +181,7 @@ internal static class InventoryWatch
     private static readonly Bag[] _bags =
     {
         new("Equips", true),
-        new("Artifacts", false),
+        new("Artifacts", false, "Artifact"),
         new("Cards", false),
         new("Gems", false),
         new("Consumables", false),
@@ -629,6 +632,7 @@ internal static class InventoryWatch
             if (stack <= had) continue;
 
             if (!ItemReader.ReadData(value, _facts)) continue;
+            if (_bags[bag].Type.Length > 0) _facts.Type = _bags[bag].Type;
 
             InventoryPaint.Mark mark = InventoryPaint.Judge(_facts, filter);
             // One entry per key, whatever the stack gained: ten copies of a card landing at once is

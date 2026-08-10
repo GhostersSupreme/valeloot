@@ -25,13 +25,42 @@ internal static class ItemCatalog
 {
     public const string ReferenceFileName = "valeloot-items.txt";
 
+    private static readonly Dictionary<(string ItemId, int StatType), int> Caps = new();
+
     public static string? TypeName(string itemId) => null;
     public static string? DisplayName(string itemId) => null;
 
+    public static void SetCap(string itemId, int statType, int cap) => Caps[(itemId, statType)] = cap;
+
     public static bool TryScaledValue(string itemId, int statType, int rollPct, out int value)
     {
-        value = 0;
-        return false;
+        if (!Caps.TryGetValue((itemId, statType), out int cap))
+        {
+            value = 0;
+            return false;
+        }
+        float scaled = rollPct / 100f * 0.333333f + 0.666667f;
+        value = (int)Math.Round((double)(cap * scaled), MidpointRounding.AwayFromZero);
+        return true;
+    }
+
+    public static bool TryIsDisplayedTop(string itemId, int statType, int rollPct, out bool top)
+    {
+        if (!Caps.TryGetValue((itemId, statType), out int cap))
+        {
+            top = false;
+            return false;
+        }
+        int printed = Scale(cap, rollPct);
+        int legalTop = Scale(cap, 100);
+        top = cap >= 0 ? printed >= legalTop : printed <= legalTop;
+        return true;
+    }
+
+    private static int Scale(int cap, int rollPct)
+    {
+        float scaled = rollPct / 100f * 0.333333f + 0.666667f;
+        return (int)Math.Round((double)(cap * scaled), MidpointRounding.AwayFromZero);
     }
 }
 
@@ -53,6 +82,7 @@ internal static class Program
         }
 
         VerifyStatMatches();
+        VerifyDisplayedStatRules();
 
         string[] files = Directory.GetFiles(directory, "*.txt");
         Array.Sort(files, StringComparer.Ordinal);
@@ -89,6 +119,61 @@ internal static class Program
         AssertMatch(false, item, stats, null, 1, "at most one of three");
         AssertMatch(true, item, stats, 2, 2, "exactly two of three");
         AssertMatch(false, item, stats, 1, 1, "exactly one of three");
+    }
+
+    /// <summary>Executable contract for displayed artifact values and displayed top rolls.</summary>
+    private static void VerifyDisplayedStatRules()
+    {
+        const string artifactId = "test-artifact";
+        ItemCatalog.SetCap(artifactId, 1, 3);
+        ItemCatalog.SetCap(artifactId, 2, 2);
+        ItemCatalog.SetCap(artifactId, 3, 2);
+
+        var top = new LootFilter.ItemFacts { Id = artifactId, Type = "Artifact" };
+        top.AddStat("Vit", 1, 80, "");
+        top.AddStat("HpMult", 2, 70, "");
+        top.AddStat("MatkMult", 3, 60, "");
+
+        var displayed = new LootFilter.LootCondition
+        {
+            Types = new[] { "Artifact" },
+            Stats = new[]
+            {
+                new LootFilter.StatCondition { Stat = "Vit", MinValue = 3 },
+                new LootFilter.StatCondition { Stat = "HpMult", MinValue = 2 },
+                new LootFilter.StatCondition { Stat = "MatkMult", MinValue = 2 },
+            },
+        };
+        AssertCondition(true, top, displayed, "artifact displayed maxima");
+        AssertCondition(true, top, new LootFilter.LootCondition { MinTopRolls = 3 },
+                        "displayed top rolls below the raw threshold");
+        AssertCondition(false, top, new LootFilter.LootCondition { MinHighRolls = 1 },
+                        "displayed top rolls stay separate from raw high rolls");
+
+        var low = new LootFilter.ItemFacts { Id = artifactId, Type = "Artifact" };
+        low.AddStat("Vit", 1, 0, "");
+        AssertCondition(false, low, new LootFilter.LootCondition
+        {
+            Stats = new[] { new LootFilter.StatCondition { Stat = "Vit", MinValue = 3 } },
+        }, "lower displayed artifact value");
+        AssertCondition(false, top, new LootFilter.LootCondition
+        {
+            Stats = new[] { new LootFilter.StatCondition { Stat = "Vit", MinRollPct = 90 } },
+        }, "artifact percent form stays raw");
+    }
+
+    private static void AssertCondition(
+        bool expected,
+        LootFilter.ItemFacts item,
+        LootFilter.LootCondition when,
+        string scenario)
+    {
+        bool actual = LootFilter.Matches(item, when, LootFilter.DefaultThreshold);
+        if (actual != expected)
+        {
+            throw new InvalidOperationException(
+                $"roll semantics contract failed for {scenario}: expected {expected}, got {actual}");
+        }
     }
 
     private static void AssertMatch(
@@ -167,8 +252,10 @@ internal static class Program
         json.Append(", \"minRefine\": ").Append(Int(when.MinRefine))
             .Append(", \"minTopRolls\": ").Append(Int(when.MinTopRolls))
             .Append(", \"maxTopRolls\": ").Append(Int(when.MaxTopRolls))
-            .Append(", \"minAvgRoll\": ").Append(Int(when.MinAvgRoll))
-            .Append(", \"maxAvgRoll\": ").Append(Int(when.MaxAvgRoll))
+            .Append(", \"minHighRolls\": ").Append(Int(when.MinHighRolls))
+            .Append(", \"maxHighRolls\": ").Append(Int(when.MaxHighRolls))
+            .Append(", \"minAvgRollPct\": ").Append(Int(when.MinAvgRollPct))
+            .Append(", \"maxAvgRollPct\": ").Append(Int(when.MaxAvgRollPct))
             .Append(", \"minStatMatches\": ").Append(Int(when.MinStatMatches))
             .Append(", \"maxStatMatches\": ").Append(Int(when.MaxStatMatches))
             .Append(", \"statsAll\": ").Append(when.StatsAll ? "true" : "false")

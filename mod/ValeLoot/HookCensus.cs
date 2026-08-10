@@ -211,6 +211,15 @@ internal static class HookCensus
             equips >= 0 ? $"offset 0x{equips:x}" : "field not found on GameServerRuntime"));
         log($"census {(equips >= 0 ? "ok " : "MISS")} GameServerRuntime.Equips (id -> EquipConfig)");
 
+        int artifactSets = serverRuntimeClass == IntPtr.Zero
+            ? -1
+            : Il2CppMeta.FieldOffset(serverRuntimeClass, "ArtifactSets");
+        results.Add(new Result(
+            "GameServerRuntime.ArtifactSets (id -> ArtifactSetConfig)",
+            artifactSets >= 0,
+            artifactSets >= 0 ? $"offset 0x{artifactSets:x}" : "field not found on GameServerRuntime"));
+        log($"census {(artifactSets >= 0 ? "ok " : "MISS")} GameServerRuntime.ArtifactSets (id -> ArtifactSetConfig)");
+
         // Declared four classes up, on `BaseConfig`, so this is the walk-up form. It is the field
         // that makes `Name "Vampiric Fang Clip"` work and the reference file worth reading.
         IntPtr equipConfig = Il2CppMeta.FindClass("", "EquipConfig", GameAssemblies);
@@ -235,6 +244,14 @@ internal static class HookCensus
             substatConfig is not null,
             substatConfig is null ? "no (EquipConfig) overload on Formula" : null));
         log($"census {(substatConfig is not null ? "ok " : "MISS")} Formula.GetSubstatConfig (item -> substat pool)");
+
+        var artifactSubstatConfig = Il2CppMeta.FindOverload(formula, "GetArtifactSubstatConfig");
+        results.Add(new Result(
+            "Formula.GetArtifactSubstatConfig (artifact substat pool)",
+            artifactSubstatConfig is not null,
+            artifactSubstatConfig is null ? "no parameterless overload on Formula" : null));
+        log($"census {(artifactSubstatConfig is not null ? "ok " : "MISS")} "
+          + "Formula.GetArtifactSubstatConfig (artifact substat pool)");
 
         var substatRange = Il2CppMeta.FindMethod(formula, "GetSubstatRange", m =>
             m.ParamCount == 4 && m.ParamTypeNames[0] == "StatType" && m.ParamTypeNames[1] == "EquipSubstatRuntime");

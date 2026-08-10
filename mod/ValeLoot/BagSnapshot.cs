@@ -67,7 +67,7 @@ internal static class BagSnapshot
     public const string FileName = "valeloot-bag.txt";
 
     /// <summary>Bumped only for a change the editor's parser must notice. Written as `# version N`.</summary>
-    private const int FormatVersion = 1;
+    private const int FormatVersion = 2;
 
     /// <summary>
     /// A ceiling on accumulation, so a long session cannot grow this without bound. Well above any
@@ -92,9 +92,11 @@ internal static class BagSnapshot
         public readonly int[] StatRolls;
         /// <summary>The value the game prints for each line, or -1 where the catalog could not say.</summary>
         public readonly int[] StatPrinted;
+        /// <summary>Displayed-max line count, or -1 when any line was unanswerable.</summary>
+        public readonly int TopRolls;
 
         public Row(long hash, string uid, string itemId, string displayName, string type, int refine,
-                   bool favorite, string[] statNames, int[] statRolls, int[] statPrinted)
+                   bool favorite, string[] statNames, int[] statRolls, int[] statPrinted, int topRolls)
         {
             Hash = hash;
             Uid = uid;
@@ -106,6 +108,7 @@ internal static class BagSnapshot
             StatNames = statNames;
             StatRolls = statRolls;
             StatPrinted = statPrinted;
+            TopRolls = topRolls;
         }
     }
 
@@ -180,8 +183,8 @@ internal static class BagSnapshot
     }
 
     /// <summary>
-    /// Top of a paint pass. Picks up the threshold the file's `topRolls` column is counted against,
-    /// notes whether the catalog can answer yet, and drains anything the writer thread wants said.
+    /// Top of a paint pass. Picks up the threshold used by the file's `highRolls` column, notes
+    /// whether the catalog can answer displayed values, and drains writer-thread messages.
     /// </summary>
     public static void BeginPass(int threshold)
     {
@@ -330,8 +333,8 @@ internal static class BagSnapshot
      * objects built from them stay correct no matter what later passes do — which is what makes it
      * safe for a listener thread to hold the result. It must never hold `_rows` itself.
      *
-     * `topRolls` and `avgRoll` are deliberately NOT sent: they are functions of the roll list and the
-     * threshold, and the threshold changes the moment the player saves `Threshold 95`.
+     * Raw rolls, printed values and displayed-top counts are immutable row facts. `HighRolls` and
+     * `AvgRollPct` are derived when serialised because `HighRolls` depends on the current threshold.
      */
     public static void PublishToEditor()
     {
@@ -351,7 +354,7 @@ internal static class BagSnapshot
                 lines[i] = new EditorServer.BagLine(row.StatNames[i], row.StatRolls[i], row.StatPrinted[i]);
             }
             items[at++] = new EditorServer.BagItem(row.Uid, row.ItemId, row.DisplayName, row.Type,
-                                                   row.Refine, row.Favorite, lines);
+                                                   row.Refine, row.Favorite, row.TopRolls, lines);
         }
 
         EditorServer.PublishBag(items, _threshold, _truncated);
@@ -402,6 +405,8 @@ internal static class BagSnapshot
         var names = new string[count];
         var rolls = new int[count];
         var printed = new int[count];
+        int topRolls = 0;
+        bool topRollsKnown = count > 0;
         for (int i = 0; i < count; i++)
         {
             names[i] = Clean(facts.StatNames[i]);
@@ -409,6 +414,10 @@ internal static class BagSnapshot
             printed[i] = ItemCatalog.TryScaledValue(facts.Id, facts.StatTypes[i], facts.StatRolls[i], out int value)
                 ? value
                 : -1;
+            if (!ItemCatalog.TryIsDisplayedTop(facts.Id, facts.StatTypes[i], facts.StatRolls[i], out bool top))
+                topRollsKnown = false;
+            else if (top)
+                topRolls++;
         }
 
         string display = ItemCatalog.DisplayName(facts.Id) ?? "";
@@ -417,7 +426,8 @@ internal static class BagSnapshot
         if (type.Length == 0) type = facts.Type;
 
         return new Row(hash, Clean(uid), Clean(facts.Id), Clean(display), Clean(type),
-                       facts.Refine, facts.Favorite, names, rolls, printed);
+                       facts.Refine, facts.Favorite, names, rolls, printed,
+                       topRollsKnown ? topRolls : -1);
     }
 
     /**
@@ -483,15 +493,15 @@ internal static class BagSnapshot
         }
         text.Append("# generated: ")
             .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)).Append('\n')
-            .Append("# uid\titemId\tdisplayName\ttype\trefine\tfavorite\ttopRolls\tavgRoll\tstats\n");
+            .Append("# uid\titemId\tdisplayName\ttype\trefine\tfavorite\ttopRolls\thighRolls\tavgRollPct\tstats\n");
 
         foreach (Row row in rows)
         {
-            int topRolls = 0;
+            int highRolls = 0;
             int sum = 0;
             for (int i = 0; i < row.StatRolls.Length; i++)
             {
-                if (row.StatRolls[i] >= threshold) topRolls++;
+                if (row.StatRolls[i] >= threshold) highRolls++;
                 sum += row.StatRolls[i];
             }
 
@@ -501,11 +511,12 @@ internal static class BagSnapshot
                 .Append(row.Type.Length > 0 ? row.Type : "-").Append('\t')
                 .Append(row.Refine.ToString(CultureInfo.InvariantCulture)).Append('\t')
                 .Append(row.Favorite ? '1' : '0').Append('\t')
-                .Append(topRolls.ToString(CultureInfo.InvariantCulture)).Append('\t');
+                .Append(row.TopRolls < 0 ? "-" : row.TopRolls.ToString(CultureInfo.InvariantCulture)).Append('\t')
+                .Append(highRolls.ToString(CultureInfo.InvariantCulture)).Append('\t');
 
-            // Rounded the same way `AvgRoll` is compared, and `-` rather than 0 for an item with no
-            // lines: "average roll below 35" is about an item that rolled badly, not one that cannot
-            // roll at all. A `0` here would make every consumable match such a rule in the preview.
+            // Rounded the same way `AvgRollPct` is compared, and `-` rather than 0 for an item with
+            // no lines: "average roll below 35" is about an item that rolled badly, not one that
+            // cannot roll at all. A `0` here would make every consumable match in the preview.
             if (row.StatRolls.Length == 0) text.Append('-');
             else text.Append(((int)Math.Round(sum / (double)row.StatRolls.Length, MidpointRounding.AwayFromZero))
                              .ToString(CultureInfo.InvariantCulture));

@@ -43,9 +43,9 @@ const steps: readonly Step[] = [
     meaning: 'the vendored parser does not type-check; nothing else would notice',
   },
   {
-    name: 'StatMatches behavior',
-    argv: ['bun', 'test', 'tools/conformance/statmatches.test.ts'],
-    meaning: 'the StatMatches parser or evaluator contract is broken',
+    name: 'filter behavior',
+    argv: ['bun', 'test', 'tools/conformance/statmatches.test.ts', 'tools/conformance/roll-semantics.test.ts'],
+    meaning: 'a filter parser or evaluator contract is broken',
   },
   {
     name: 'filter language conformance',

@@ -53,8 +53,10 @@ function rule(r: LootRule): string {
     `, "minRefine": ${num(w.minRefine)}` +
     `, "minTopRolls": ${num(w.minTopRolls)}` +
     `, "maxTopRolls": ${num(w.maxTopRolls)}` +
-    `, "minAvgRoll": ${num(w.minAvgRoll)}` +
-    `, "maxAvgRoll": ${num(w.maxAvgRoll)}` +
+    `, "minHighRolls": ${num(w.minHighRolls)}` +
+    `, "maxHighRolls": ${num(w.maxHighRolls)}` +
+    `, "minAvgRollPct": ${num(w.minAvgRollPct)}` +
+    `, "maxAvgRollPct": ${num(w.maxAvgRollPct)}` +
     `, "minStatMatches": ${num(w.minStatMatches)}` +
     `, "maxStatMatches": ${num(w.maxStatMatches)}` +
     // `statMode: 'any' | 'all'` here, a `StatsAll` boolean there. Absent means all, on both sides.
