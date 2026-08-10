@@ -119,7 +119,7 @@ internal static class FilterParser
         public bool Hide;
         public string Name = "";
         public int StartLine;
-        public readonly List<(int Line, string Text)> Body = new();
+        public readonly List<(int Line, string Text, int Indent)> Body = new();
     }
 
     private static string Unquote(string value) =>
@@ -161,6 +161,7 @@ internal static class FilterParser
             if (trimmed.Length == 0) continue;
 
             bool indented = char.IsWhiteSpace(stripped[0]);
+            int indent = stripped.Length - stripped.TrimStart().Length;
             string[] parts = Whitespace.Split(trimmed);
             string head = parts[0];
             string keyword = head.ToLowerInvariant();
@@ -210,7 +211,7 @@ internal static class FilterParser
                 errors.Add(new FilterError(i + 1, trimmed, $"\"{head}\" is not inside a Show or Hide block"));
                 continue;
             }
-            current.Body.Add((i + 1, trimmed));
+            current.Body.Add((i + 1, trimmed, indent));
         }
 
         foreach (Block block in blocks)
@@ -278,10 +279,41 @@ internal static class FilterParser
         }
     }
 
+    private static LootFilter.StatCondition? ParseStat(
+        int line,
+        string text,
+        string remainder,
+        List<FilterError> errors)
+    {
+        Match match = StatPattern.Match(remainder);
+        if (!match.Success)
+        {
+            errors.Add(new FilterError(line, text,
+                "Stat needs e.g. \"Stat Agi >= 90%\" (roll quality) or \"Stat Agi >= 3\" (the printed value)"));
+            return null;
+        }
+
+        string op = match.Groups[2].Value;
+        if (op != ">=" && op != ">")
+        {
+            errors.Add(new FilterError(line, text,
+                "Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)"));
+            return null;
+        }
+
+        double value = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+        int minimum = op == ">" ? (int)Math.Floor(value) + 1 : (int)Math.Ceiling(value);
+        var condition = new LootFilter.StatCondition { Stat = match.Groups[1].Value };
+        if (match.Groups[4].Value.Length > 0) condition.MinRollPct = minimum;
+        else condition.MinValue = minimum;
+        return condition;
+    }
+
     private static LootFilter.LootRule ParseBlock(Block block, List<FilterError> errors)
     {
         var when = new LootFilter.LootCondition();
         var stats = new List<LootFilter.StatCondition>();
+        var anyOfStats = new List<LootFilter.StatCondition[]>();
         string color = block.Hide ? "#6b7a73" : "#4ade80";
         string label = "";
         int level = 0;
@@ -290,12 +322,53 @@ internal static class FilterParser
         int? statMatchesLine = null;
         string statMatchesText = "";
 
-        foreach ((int line, string text) in block.Body)
+        for (int bodyIndex = 0; bodyIndex < block.Body.Count; bodyIndex++)
         {
+            (int line, string text, int indent) = block.Body[bodyIndex];
             string[] parts = Whitespace.Split(text);
             string head = parts[0];
             string keyword = head.ToLowerInvariant();
             string remainder = parts.Length > 1 ? string.Join(" ", parts, 1, parts.Length - 1).Trim() : "";
+
+            if (keyword == "anyof")
+            {
+                if (remainder.Length > 0)
+                {
+                    errors.Add(new FilterError(line, text,
+                        "AnyOf takes no value; indent Stat conditions beneath it"));
+                }
+
+                var group = new List<LootFilter.StatCondition>();
+                while (bodyIndex + 1 < block.Body.Count && block.Body[bodyIndex + 1].Indent > indent)
+                {
+                    (int childLine, string childText, int _) = block.Body[++bodyIndex];
+                    string[] childParts = Whitespace.Split(childText);
+                    if (!string.Equals(childParts[0], "stat", StringComparison.OrdinalIgnoreCase))
+                    {
+                        errors.Add(new FilterError(childLine, childText,
+                            "AnyOf currently accepts only Stat conditions"));
+                        continue;
+                    }
+
+                    string childRemainder = childParts.Length > 1
+                        ? string.Join(" ", childParts, 1, childParts.Length - 1).Trim()
+                        : "";
+                    LootFilter.StatCondition? condition = ParseStat(
+                        childLine, childText, childRemainder, errors);
+                    if (condition is not null) group.Add(condition);
+                }
+
+                if (group.Count == 0)
+                {
+                    errors.Add(new FilterError(line, text,
+                        "AnyOf requires at least one indented Stat condition"));
+                }
+                else
+                {
+                    anyOfStats.Add(group.ToArray());
+                }
+                continue;
+            }
 
             switch (keyword)
             {
@@ -320,29 +393,8 @@ internal static class FilterParser
 
                 case "stat":
                 {
-                    Match match = StatPattern.Match(remainder);
-                    if (!match.Success)
-                    {
-                        errors.Add(new FilterError(line, text, "Stat needs e.g. \"Stat Agi >= 90%\" (roll quality) or \"Stat Agi >= 3\" (the printed value)"));
-                        break;
-                    }
-                    string op = match.Groups[2].Value;
-                    if (op != ">=" && op != ">")
-                    {
-                        errors.Add(new FilterError(line, text, "Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)"));
-                        break;
-                    }
-                    double value = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
-                    // Both forms compare whole numbers — a roll is a whole percentage and the game
-                    // prints a whole value — so `> 89` is exactly `>= 90`; a fractional bound would
-                    // claim a precision neither side has.
-                    int minimum = op == ">" ? (int)Math.Floor(value) + 1 : (int)Math.Ceiling(value);
-                    var condition = new LootFilter.StatCondition { Stat = match.Groups[1].Value };
-                    // The `%` is the question, not decoration: with it the bound is roll quality,
-                    // without it the value the game prints. Exactly one of the two is ever set.
-                    if (match.Groups[4].Value.Length > 0) condition.MinRollPct = minimum;
-                    else condition.MinValue = minimum;
-                    stats.Add(condition);
+                    LootFilter.StatCondition? condition = ParseStat(line, text, remainder, errors);
+                    if (condition is not null) stats.Add(condition);
                     break;
                 }
 
@@ -549,6 +601,7 @@ internal static class FilterParser
         }
 
         if (stats.Count > 0) when.Stats = stats.ToArray();
+        if (anyOfStats.Count > 0) when.AnyOfStats = anyOfStats.ToArray();
 
         if (statMatchesLine is int boundsLine && stats.Count > 0)
         {

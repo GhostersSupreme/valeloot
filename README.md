@@ -6,7 +6,7 @@ when a matching item is picked up.
 
 It is complete on its own. No companion app, no server, no account, nothing to sign up for.
 
-> ### ⬇ [Download ValeLoot 0.3.2](https://github.com/bjb2/valeloot/releases/download/v0.3.2/ValeLoot-0.3.2-with-BepInEx.zip)
+> ### ⬇ [Download ValeLoot 0.3.3](https://github.com/bjb2/valeloot/releases/download/v0.3.3/ValeLoot-0.3.3-with-BepInEx.zip)
 >
 > Unzip it into your SpiritVale folder, launch the game, press **F8**.
 >
@@ -157,6 +157,7 @@ Hide "vendor trash"
 | `Stat Agi >= 90%` | that stat's line rolled in the top tenth of its range |
 | `Stat Agi >= 3` | that stat *prints* at least 3 on this item |
 | `StatMatches >= 3` | at least this many of the listed `Stat` conditions must match |
+| `AnyOf` with indented `Stat` lines | at least one stat inside that group must match |
 | `OverRoll` | a line above its normal maximum — only a Chaos widen does that |
 | `Refine >= 5` | refine level at least this |
 | `Favorite` | the star you put on it in game |
@@ -203,6 +204,23 @@ Show "Two lucky raw rolls"
 those conditions to `HighRolls` to preserve that behavior. Keep `TopRolls` when the intended rule is
 “the tooltip shows the maximum.” `AvgRoll` remains valid, but `AvgRollPct` is the clearer spelling
 written by the editor.
+
+**`AnyOf` combines required stats with alternatives.** Conditions directly under `Show` still all
+have to match. Each `AnyOf` group also has to match at least one of its indented `Stat` lines:
+
+```text
+Show "AGI plus attack"
+    Stat Agi >= 1
+    AnyOf
+        Stat AtkMult >= 1
+        Stat Atk     >= 1
+    Highlight glow
+```
+
+This is `Agi AND (AtkMult OR Atk)`. `AtkMult` is the game's Atk% stat. `AnyOf` currently accepts
+only `Stat` conditions; the indentation is required. A rule may contain multiple `AnyOf` groups, and
+each group must contribute a match. `AnyStat`, `AllStats`, and `StatMatches` continue to aggregate
+only the ordinary `Stat` lines outside those groups.
 
 **`StatMatches` lets a rule require some of its listed stats instead of all of them.** Normally,
 multiple `Stat` lines must all match. `AnyStat` changes that to at least one. `StatMatches` instead

@@ -120,7 +120,7 @@ INSTALL
 Unzip, launch, press F8. There are two downloads and the first one is almost certainly the one you
 want.
 
-ValeLoot-0.3.2-with-BepInEx.zip - TAKE THIS ONE
+ValeLoot-0.3.3-with-BepInEx.zip - TAKE THIS ONE
 
   1. Unzip it into your SpiritVale folder - the folder holding SpiritVale.exe.
   2. Start the game. THE FIRST START TAKES A FEW MINUTES - see below.
@@ -146,7 +146,7 @@ BepInEx is included UNMODIFIED, under its own LGPL-2.1 licence. Its licence text
 source are in NOTICE.txt at the root of the zip, alongside BepInEx-LICENSE.txt. ValeLoot's own licence
 is at the bottom of this file and covers only ValeLoot.
 
-ValeLoot-0.3.2.zip - THE PLUGIN ON ITS OWN
+ValeLoot-0.3.3.zip - THE PLUGIN ON ITS OWN
 
 For someone who already runs BepInEx 6 IL2CPP (the BLEEDING-EDGE "be" build). It contains the DLL and
 this README and nothing else. Unzip it into the same game folder - the paths inside are already
@@ -346,6 +346,7 @@ Conditions (all optional, and all must hold for the block to match):
     Stat Agi >= 3           that substat PRINTS at least +3 on this item
     StatMatches >= 3        at least three of the listed Stat conditions must match
     AnyStat                 one Stat line is enough (default: every Stat line must match)
+    AnyOf                  one of its more-indented Stat lines must match; the group itself is required
     TopRolls >= 3           at least three lines print their legal maximum; over-rolls count
     HighRolls >= 3          at least three hidden raw rolls reach Threshold
     AvgRollPct < 35         mean hidden roll percentage across the item's lines
@@ -354,6 +355,16 @@ Conditions (all optional, and all must hold for the block to match):
     OverRoll / NoOverRoll   has a line that rolled past 100% - the chaos over-roll
     Chaos / NoChaos         has a chaos type, or has not
     Favorite / NotFavorite  the game's own favourite flag
+
+Required AGI plus either Atk% or flat Atk:
+
+    Stat Agi >= 1
+    AnyOf
+        Stat AtkMult >= 1
+        Stat Atk     >= 1
+
+AnyOf currently accepts only Stat lines. Its child lines must be indented farther than AnyOf. Each
+AnyOf group is required, while the Stat lines inside one group are alternatives.
 
 Decorations, on Show blocks only:
 

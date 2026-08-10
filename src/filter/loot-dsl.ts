@@ -125,7 +125,7 @@ interface Block {
   kind: 'show' | 'hide';
   name: string;
   startLine: number;
-  body: Array<{ line: number; text: string }>;
+  body: Array<{ line: number; text: string; indent: number }>;
 }
 
 const unquote = (value: string): string =>
@@ -233,7 +233,11 @@ export function parseLootFilter(text: string): ParsedFilter {
       errors.push({ line: i + 1, text: trimmed, message: `"${head}" is not inside a Show or Hide block` });
       continue;
     }
-    current.body.push({ line: i + 1, text: trimmed });
+    current.body.push({
+      line: i + 1,
+      text: trimmed,
+      indent: stripped.length - stripped.trimStart().length,
+    });
   }
 
   for (const block of blocks) {
@@ -258,6 +262,7 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
   const errors: FilterError[] = [];
   const when: LootCondition = {};
   const stats: StatCondition[] = [];
+  const anyOfStats: StatCondition[][] = [];
   let color = block.kind === 'hide' ? '#6b7a73' : '#4ade80';
   let label: string | undefined;
   let highlight: LootHighlight | undefined;
@@ -265,6 +270,22 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
   let statModeExplicit = false;
   let statMatchesLine: number | undefined;
   let statMatchesText = '';
+  const parseStat = (line: number, text: string, remainder: string): StatCondition | undefined => {
+    const match = /^(\S+)\s*([<>]=?|=)\s*(-?\d+(?:\.\d+)?)(%?)$/.exec(remainder);
+    if (!match) {
+      errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi >= 90%" (roll quality)' });
+      return undefined;
+    }
+    const [, stat, op, rawValue, percent] = match;
+    if (op !== '>=' && op !== '>') {
+      errors.push({ line, text, message: 'Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)' });
+      return undefined;
+    }
+    const raw = Number(rawValue);
+    const value = op === '>' ? Math.floor(raw) + 1 : Math.ceil(raw);
+    return percent ? { stat: stat!, minRollPct: value } : { stat: stat!, minValue: value };
+  };
+
 
   /**
    * Parse `>= 60` into an inclusive bound.
@@ -298,10 +319,40 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
     apply(undefined, integral ? value - 1 : value - nudge);
   };
 
-  for (const { line, text } of block.body) {
+  for (let bodyIndex = 0; bodyIndex < block.body.length; bodyIndex++) {
+    const { line, text, indent } = block.body[bodyIndex]!;
     const [head, ...rest] = text.split(/\s+/);
     const keyword = (head ?? '').toLowerCase();
     const remainder = rest.join(' ').trim();
+
+    if (keyword === 'anyof') {
+      if (remainder) {
+        errors.push({ line, text, message: 'AnyOf takes no value; indent Stat conditions beneath it' });
+      }
+
+      const group: StatCondition[] = [];
+      while (bodyIndex + 1 < block.body.length && block.body[bodyIndex + 1]!.indent > indent) {
+        const child = block.body[++bodyIndex]!;
+        const [childHead, ...childRest] = child.text.split(/\s+/);
+        if ((childHead ?? '').toLowerCase() !== 'stat') {
+          errors.push({
+            line: child.line,
+            text: child.text,
+            message: 'AnyOf currently accepts only Stat conditions',
+          });
+          continue;
+        }
+        const condition = parseStat(child.line, child.text, childRest.join(' ').trim());
+        if (condition) group.push(condition);
+      }
+
+      if (!group.length) {
+        errors.push({ line, text, message: 'AnyOf requires at least one indented Stat condition' });
+      } else {
+        anyOfStats.push(group);
+      }
+      continue;
+    }
 
     switch (keyword) {
       case 'name':
@@ -315,29 +366,8 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
         if (!when.slotTypes.length) errors.push({ line, text, message: 'Type needs at least one item type' });
         break;
       case 'stat': {
-        // Stat <Name> >= <n>[%]
-        const match = /^(\S+)\s*([<>]=?|=)\s*(-?\d+(?:\.\d+)?)(%?)$/.exec(remainder);
-        if (!match) {
-          errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi >= 90%" (roll quality)' });
-          break;
-        }
-        const [, stat, op, rawValue, percent] = match;
-        if (op !== '>=' && op !== '>') {
-          errors.push({ line, text, message: 'Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)' });
-          break;
-        }
-        /**
-         * `>` EXCLUDES the value. It used to be folded into `>=`, which quietly made `Stat Crit > 7`
-         * claim an item with exactly 7 — in the editor only, because the mod reads the same line as
-         * `>= 8`. A preview that includes an item the game excludes is worse than no preview.
-         *
-         * Both sides compare whole numbers: a roll is a whole percentage and the game prints a whole
-         * value, so `> 7` is exactly `>= 8` and no precision is lost by saying so. This mirrors
-         * `FilterParser.ParseBlock`, which computes the same bound with floor/ceil.
-         */
-        const raw = Number(rawValue);
-        const value = op === '>' ? Math.floor(raw) + 1 : Math.ceil(raw);
-        stats.push(percent ? { stat: stat!, minRollPct: value } : { stat: stat!, minValue: value });
+        const condition = parseStat(line, text, remainder);
+        if (condition) stats.push(condition);
         break;
       }
       case 'anystat':
@@ -480,6 +510,7 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
   }
 
   if (stats.length) when.stats = stats;
+  if (anyOfStats.length) when.anyOfStats = anyOfStats;
 
   if (statMatchesLine !== undefined && stats.length) {
     const min = when.minStatMatches;
@@ -572,6 +603,14 @@ export function formatLootFilter(parsed: Pick<ParsedFilter, 'rules' | 'overrides
       if (stat.minRollPct !== undefined) out.push(`    Stat      ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
       else if (stat.minValue !== undefined) out.push(`    Stat      ${stat.stat} >= ${stat.minValue}`);
       else out.push(`    Stat      ${stat.stat} >= 0`);
+    }
+    for (const group of w.anyOfStats ?? []) {
+      out.push('    AnyOf');
+      for (const stat of group) {
+        if (stat.minRollPct !== undefined) out.push(`        Stat  ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
+        else if (stat.minValue !== undefined) out.push(`        Stat  ${stat.stat} >= ${stat.minValue}`);
+        else out.push(`        Stat  ${stat.stat} >= 0`);
+      }
     }
     const boundedStatMatches =
       w.minStatMatches !== undefined ||

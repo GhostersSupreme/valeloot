@@ -82,6 +82,7 @@ internal static class Program
         }
 
         VerifyStatMatches();
+        VerifyAnyOf();
         VerifyDisplayedStatRules();
 
         string[] files = Directory.GetFiles(directory, "*.txt");
@@ -119,6 +120,40 @@ internal static class Program
         AssertMatch(false, item, stats, null, 1, "at most one of three");
         AssertMatch(true, item, stats, 2, 2, "exactly two of three");
         AssertMatch(false, item, stats, 1, 1, "exactly one of three");
+    }
+
+    /// <summary>Executable contract for required stats combined with grouped alternatives.</summary>
+    private static void VerifyAnyOf()
+    {
+        var agiAndAtk = new LootFilter.LootCondition
+        {
+            Stats = new[]
+            {
+                new LootFilter.StatCondition { Stat = "Agi", MinRollPct = 1 },
+            },
+            AnyOfStats = new[]
+            {
+                new[]
+                {
+                    new LootFilter.StatCondition { Stat = "AtkMult", MinRollPct = 1 },
+                    new LootFilter.StatCondition { Stat = "Atk", MinRollPct = 1 },
+                },
+            },
+        };
+
+        var agiAtk = new LootFilter.ItemFacts();
+        agiAtk.AddStat("Agi", 0, 80, "");
+        agiAtk.AddStat("Atk", 0, 60, "");
+        AssertCondition(true, agiAtk, agiAndAtk, "required AGI plus one attack alternative");
+
+        var agiOnly = new LootFilter.ItemFacts();
+        agiOnly.AddStat("Agi", 0, 80, "");
+        AssertCondition(false, agiOnly, agiAndAtk, "required AGI without an attack alternative");
+
+        var attacksOnly = new LootFilter.ItemFacts();
+        attacksOnly.AddStat("AtkMult", 0, 80, "");
+        attacksOnly.AddStat("Atk", 0, 60, "");
+        AssertCondition(false, attacksOnly, agiAndAtk, "attack alternatives without required AGI");
     }
 
     /// <summary>Executable contract for displayed artifact values and displayed top rolls.</summary>
@@ -275,6 +310,27 @@ internal static class Program
                 json.Append(", \"minRollPct\": ").Append(Int(stat.MinRollPct))
                     .Append(", \"minValue\": ").Append(Int(stat.MinValue))
                     .Append('}');
+            }
+        }
+        json.Append("], \"anyOfStats\": [");
+        if (when.AnyOfStats is not null)
+        {
+            for (int groupIndex = 0; groupIndex < when.AnyOfStats.Length; groupIndex++)
+            {
+                if (groupIndex > 0) json.Append(", ");
+                json.Append('[');
+                LootFilter.StatCondition[] group = when.AnyOfStats[groupIndex];
+                for (int statIndex = 0; statIndex < group.Length; statIndex++)
+                {
+                    if (statIndex > 0) json.Append(", ");
+                    LootFilter.StatCondition stat = group[statIndex];
+                    json.Append("{\"stat\": ");
+                    Str(json, stat.Stat);
+                    json.Append(", \"minRollPct\": ").Append(Int(stat.MinRollPct))
+                        .Append(", \"minValue\": ").Append(Int(stat.MinValue))
+                        .Append('}');
+                }
+                json.Append(']');
             }
         }
         json.Append("]}}");

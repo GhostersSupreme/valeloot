@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseLootFilter } from '../../src/filter/loot-dsl.ts';
+import { formatLootFilter, parseLootFilter } from '../../src/filter/loot-dsl.ts';
 import {
   matchesCondition,
   normalizeLootRules,
@@ -78,5 +78,77 @@ describe('StatMatches', () => {
     expect(rules[0]!.when.minStatMatches).toBeUndefined();
     expect(rules[0]!.when.maxStatMatches).toBeUndefined();
     expect(matchesCondition(item, rules[0]!.when, {})).toBe(false);
+  });
+});
+
+describe('AnyOf', () => {
+  const text = [
+    'Show "AGI plus attack"',
+    '    Stat Agi >= 1',
+    '    AnyOf',
+    '        Stat AtkMult >= 1',
+    '        Stat Atk >= 1',
+    '    Highlight glow',
+  ].join('\n');
+
+  const withStats = (...stats: string[]): OwnedGear => ({
+    ...item,
+    lines: stats.map((stat) => ({
+      stat,
+      base: 1,
+      rollPct: 50,
+      isChaos: false,
+      over: false,
+    })),
+  });
+
+  test.each([
+    [['Agi', 'Atk'], true],
+    [['Agi', 'AtkMult'], true],
+    [['Agi'], false],
+    [['Atk', 'AtkMult'], false],
+  ] as const)('matches required stats plus grouped alternatives: %j', (stats, expected) => {
+    const parsed = parseLootFilter(text);
+    expect(parsed.errors).toEqual([]);
+    expect(matchesCondition(withStats(...stats), parsed.rules[0]!.when, {})).toBe(expected);
+  });
+
+  test('requires one match from every AnyOf group', () => {
+    const parsed = parseLootFilter([
+      'Show "two groups"',
+      '    AnyOf',
+      '        Stat Atk >= 1',
+      '        Stat AtkMult >= 1',
+      '    AnyOf',
+      '        Stat Vit >= 1',
+      '        Stat Hp >= 1',
+    ].join('\n'));
+
+    expect(parsed.errors).toEqual([]);
+    expect(matchesCondition(withStats('Atk', 'Vit'), parsed.rules[0]!.when, {})).toBe(true);
+    expect(matchesCondition(withStats('Atk'), parsed.rules[0]!.when, {})).toBe(false);
+  });
+
+  test('formats grouped stats without losing their nesting', () => {
+    const parsed = parseLootFilter(text);
+    const reparsed = parseLootFilter(formatLootFilter(parsed));
+
+    expect(reparsed.errors).toEqual([]);
+    expect(reparsed.rules[0]!.when.anyOfStats).toEqual(parsed.rules[0]!.when.anyOfStats);
+  });
+
+  test.each([
+    [
+      ['Show "empty"', '    AnyOf', '    Stat Agi >= 1'].join('\n'),
+      'requires at least one indented Stat',
+    ],
+    [
+      ['Show "wrong child"', '    AnyOf', '        Refine >= 1'].join('\n'),
+      'accepts only Stat conditions',
+    ],
+  ] as const)('rejects malformed groups', (filter, message) => {
+    const parsed = parseLootFilter(filter);
+    expect(parsed.rules).toHaveLength(0);
+    expect(parsed.errors.some((error) => error.message.includes(message))).toBe(true);
   });
 });

@@ -76,6 +76,11 @@ export interface LootCondition {
   minRefine?: number;
   /** Required/candidate substat lines. */
   stats?: StatCondition[];
+  /**
+   * Each nested array is one `AnyOf` block. Every block must have at least one matching stat,
+   * while separate blocks and the rule's ordinary conditions are still ANDed.
+   */
+  anyOfStats?: StatCondition[][];
 
   /**
    * Minimum/maximum number of listed `stats` entries that must match.
@@ -275,6 +280,15 @@ export function matchLoot(item: OwnedGear, rules: readonly LootRule[], context: 
   return null;
 }
 
+function matchesStat(item: OwnedGear, condition: StatCondition): boolean {
+  const wanted = condition.stat.toLowerCase();
+  const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === wanted);
+  return Boolean(line)
+    && (condition.minRollPct === undefined
+      || (line!.rollPct !== null && line!.rollPct >= condition.minRollPct))
+    && (condition.minValue === undefined || line!.base >= condition.minValue);
+}
+
 export function matchesCondition(item: OwnedGear, when: LootCondition, context: LootContext): boolean {
   if (when.slotTypes?.length && !when.slotTypes.includes(item.slotType)) return false;
   if ((when.minTopRolls !== undefined || when.maxTopRolls !== undefined) && item.topRolls === null) return false;
@@ -322,12 +336,7 @@ export function matchesCondition(item: OwnedGear, when: LootCondition, context: 
        * nothing on screen to say why — the rule simply sat there looking enabled. A filter that fails
        * silently on capitalisation is a trap, and nothing here needs `Dex` and `DEX` to be different.
        */
-      const wanted = condition.stat.toLowerCase();
-      const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === wanted);
-      const ok = Boolean(line)
-        && (condition.minRollPct === undefined
-          || (line!.rollPct !== null && line!.rollPct >= condition.minRollPct))
-        && (condition.minValue === undefined || line!.base >= condition.minValue);
+      const ok = matchesStat(item, condition);
       if (ok) hits++;
       else if (!boundedStatMatches && mode === 'all') return false;
     }
@@ -353,6 +362,18 @@ export function matchesCondition(item: OwnedGear, when: LootCondition, context: 
         // Fail closed for programmatically-created rules that bypass the text parser.
         return false;
     }
+  if (when.anyOfStats?.length) {
+    for (const group of when.anyOfStats) {
+      let matched = false;
+      for (const condition of group) {
+        if (!matchesStat(item, condition)) continue;
+        matched = true;
+        break;
+      }
+      if (!matched) return false;
+    }
+  }
+
 
   if (when.minSharedStats !== undefined) {
     const worn = context.wornStats;
@@ -459,6 +480,23 @@ function normalizeCondition(input: unknown): LootCondition {
           ...(Number.isFinite(value) ? { minValue: value } : {}),
         };
       });
+  }
+  if (Array.isArray(raw.anyOfStats)) {
+    when.anyOfStats = raw.anyOfStats
+      .filter((group): group is StatCondition[] => Array.isArray(group))
+      .map((group) => group
+        .filter((entry): entry is StatCondition => Boolean(entry) && typeof (entry as StatCondition).stat === 'string')
+        .map((entry) => {
+          const min = Number(entry.minRollPct);
+          const value = Number(entry.minValue);
+          return {
+            stat: entry.stat,
+            ...(Number.isFinite(min) ? { minRollPct: Math.max(0, Math.min(100, min)) } : {}),
+            ...(Number.isFinite(value) ? { minValue: value } : {}),
+          };
+        }))
+      .filter((group) => group.length > 0);
+    if (!when.anyOfStats.length) delete when.anyOfStats;
   }
   if (Array.isArray(raw.verdicts)) {
     const allowed: Verdict[] = ['upgrade', 'better-rolls', 'sidegrade', 'worse'];

@@ -113,7 +113,7 @@ starts with ValeLoot installed.
 Unzip, launch, press F8. There are two downloads and the first one is almost certainly the one you
 want:
 
-### `ValeLoot-0.3.2-with-BepInEx.zip` — take this one
+### `ValeLoot-0.3.3-with-BepInEx.zip` — take this one
 
 1. Unzip it into your SpiritVale folder — the folder holding `SpiritVale.exe`.
 2. Start the game. **The first start takes a few minutes** — see below.
@@ -140,7 +140,7 @@ BepInEx is included **unmodified**, under its own LGPL-2.1 licence. Its licence 
 source are in `NOTICE.txt` at the root of the zip, alongside `BepInEx-LICENSE.txt`. ValeLoot's own
 licence is at the bottom of this file and covers only ValeLoot.
 
-### `ValeLoot-0.3.2.zip` — the plugin on its own
+### `ValeLoot-0.3.3.zip` — the plugin on its own
 
 For someone who already runs BepInEx 6 IL2CPP (the *bleeding-edge* `be` build). It contains the DLL
 and this README and nothing else. Unzip it into the same game folder — the paths inside are already

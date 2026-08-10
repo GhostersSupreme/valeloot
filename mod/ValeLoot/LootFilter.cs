@@ -191,6 +191,11 @@ internal static class LootFilter
         public int? MinAvgRollPct;
         public int? MaxAvgRollPct;
         public StatCondition[]? Stats;
+        /// <summary>
+        /// Stat alternatives grouped by `AnyOf`. Every group needs one match; groups and ordinary
+        /// conditions remain ANDed.
+        /// </summary>
+        public StatCondition[][]? AnyOfStats;
 
         /// <summary>
         /// Minimum/maximum number of listed Stat conditions that must match.
@@ -215,6 +220,7 @@ internal static class LootFilter
             && MinHighRolls is null && MaxHighRolls is null
             && MinAvgRollPct is null && MaxAvgRollPct is null
             && (Stats is null || Stats.Length == 0)
+            && (AnyOfStats is null || AnyOfStats.Length == 0)
             && MinStatMatches is null && MaxStatMatches is null
             && HasChaos is null && Favorite is null && OverRoll is null;
     }
@@ -429,6 +435,22 @@ internal static class LootFilter
         else if (boundedStatMatches)
         {
             return false;
+        }
+
+        if (when.AnyOfStats is not null)
+        {
+            for (int groupIndex = 0; groupIndex < when.AnyOfStats.Length; groupIndex++)
+            {
+                StatCondition[] group = when.AnyOfStats[groupIndex];
+                bool matched = false;
+                for (int statIndex = 0; statIndex < group.Length; statIndex++)
+                {
+                    if (!MatchesStat(item, group[statIndex])) continue;
+                    matched = true;
+                    break;
+                }
+                if (!matched) return false;
+            }
         }
 
         return true;

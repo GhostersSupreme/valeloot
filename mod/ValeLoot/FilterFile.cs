@@ -212,6 +212,13 @@ internal static class FilterFile
 #   Favorite              the star you put on it in game
 #   Chaos / NoChaos       has a chaos type, or has not
 #   AnyStat               one Stat line is enough (default: every Stat line must match)
+#   AnyOf                one of its more-indented Stat lines must match; every group is required
+#
+# Example: AGI plus either Atk% (AtkMult) or flat Atk
+#   Stat       Agi >= 1
+#   AnyOf
+#       Stat   AtkMult >= 1
+#       Stat   Atk >= 1
 #
 # Decorations (Show blocks only)
 #   Color      #4ade80    the cell's colour, and the colour of the hover note

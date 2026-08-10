@@ -1,0 +1,30 @@
+# Direct conditions remain required; one indented Stat in each AnyOf group must match.
+
+Show "AGI plus attack"
+    Stat      Agi >= 1
+    AnyOf
+        Stat  AtkMult >= 1
+        Stat  Atk >= 1
+    Color     #7cc0ff
+    Highlight glow
+
+Show "attack and defense alternatives"
+    AnyOf
+        Stat  AtkMult >= 90%
+        Stat  Atk >= 90%
+    AnyOf
+        Stat  Vit >= 3
+        Stat  Hp >= 5
+    Tag       MIXED
+
+# A child must be indented farther than its AnyOf opener.
+Show "invalid empty group"
+    AnyOf
+    Stat      Agi >= 1
+    Color     #ef6f6f
+
+# Presentation and non-Stat conditions cannot sit inside an AnyOf group.
+Show "invalid child kind"
+    AnyOf
+        Refine >= 1
+    Color     #ef6f6f

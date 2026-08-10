@@ -579,6 +579,11 @@ function matchLoot(item, rules, context) {
   }
   return null;
 }
+function matchesStat(item, condition) {
+  const wanted = condition.stat.toLowerCase();
+  const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === wanted);
+  return Boolean(line) && (condition.minRollPct === undefined || line.rollPct !== null && line.rollPct >= condition.minRollPct) && (condition.minValue === undefined || line.base >= condition.minValue);
+}
 function matchesCondition(item, when, context) {
   if (when.slotTypes?.length && !when.slotTypes.includes(item.slotType))
     return false;
@@ -622,9 +627,7 @@ function matchesCondition(item, when, context) {
     const mode = when.statMode ?? "all";
     let hits = 0;
     for (const condition of when.stats) {
-      const wanted = condition.stat.toLowerCase();
-      const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === wanted);
-      const ok = Boolean(line) && (condition.minRollPct === undefined || line.rollPct !== null && line.rollPct >= condition.minRollPct) && (condition.minValue === undefined || line.base >= condition.minValue);
+      const ok = matchesStat(item, condition);
       if (ok)
         hits++;
       else if (!boundedStatMatches && mode === "all")
@@ -642,6 +645,19 @@ function matchesCondition(item, when, context) {
     }
   } else if (boundedStatMatches) {
     return false;
+  }
+  if (when.anyOfStats?.length) {
+    for (const group of when.anyOfStats) {
+      let matched = false;
+      for (const condition of group) {
+        if (!matchesStat(item, condition))
+          continue;
+        matched = true;
+        break;
+      }
+      if (!matched)
+        return false;
+    }
   }
   if (when.minSharedStats !== undefined) {
     const worn = context.wornStats;
@@ -759,7 +775,11 @@ function parseLootFilter(text) {
       errors.push({ line: i + 1, text: trimmed, message: `"${head}" is not inside a Show or Hide block` });
       continue;
     }
-    current.body.push({ line: i + 1, text: trimmed });
+    current.body.push({
+      line: i + 1,
+      text: trimmed,
+      indent: stripped.length - stripped.trimStart().length
+    });
   }
   for (const block of blocks) {
     const result = parseRuleBlock(block, rules.length);
@@ -780,6 +800,7 @@ function parseRuleBlock(block, index) {
   const errors = [];
   const when = {};
   const stats = [];
+  const anyOfStats = [];
   let color = block.kind === "hide" ? "#6b7a73" : "#4ade80";
   let label;
   let highlight;
@@ -787,6 +808,21 @@ function parseRuleBlock(block, index) {
   let statModeExplicit = false;
   let statMatchesLine;
   let statMatchesText = "";
+  const parseStat = (line, text, remainder) => {
+    const match = /^(\S+)\s*([<>]=?|=)\s*(-?\d+(?:\.\d+)?)(%?)$/.exec(remainder);
+    if (!match) {
+      errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi >= 90%" (roll quality)' });
+      return;
+    }
+    const [, stat, op, rawValue, percent] = match;
+    if (op !== ">=" && op !== ">") {
+      errors.push({ line, text, message: "Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)" });
+      return;
+    }
+    const raw = Number(rawValue);
+    const value = op === ">" ? Math.floor(raw) + 1 : Math.ceil(raw);
+    return percent ? { stat, minRollPct: value } : { stat, minValue: value };
+  };
   const bound = (text, line, remainder, integral, apply) => {
     const match = /^([<>]=?|=)\s*(-?\d+(?:\.\d+)?)$/.exec(remainder);
     if (!match) {
@@ -814,10 +850,38 @@ function parseRuleBlock(block, index) {
     }
     apply(undefined, integral ? value - 1 : value - nudge);
   };
-  for (const { line, text } of block.body) {
+  for (let bodyIndex = 0;bodyIndex < block.body.length; bodyIndex++) {
+    const { line, text, indent } = block.body[bodyIndex];
     const [head, ...rest] = text.split(/\s+/);
     const keyword = (head ?? "").toLowerCase();
     const remainder = rest.join(" ").trim();
+    if (keyword === "anyof") {
+      if (remainder) {
+        errors.push({ line, text, message: "AnyOf takes no value; indent Stat conditions beneath it" });
+      }
+      const group = [];
+      while (bodyIndex + 1 < block.body.length && block.body[bodyIndex + 1].indent > indent) {
+        const child = block.body[++bodyIndex];
+        const [childHead, ...childRest] = child.text.split(/\s+/);
+        if ((childHead ?? "").toLowerCase() !== "stat") {
+          errors.push({
+            line: child.line,
+            text: child.text,
+            message: "AnyOf currently accepts only Stat conditions"
+          });
+          continue;
+        }
+        const condition = parseStat(child.line, child.text, childRest.join(" ").trim());
+        if (condition)
+          group.push(condition);
+      }
+      if (!group.length) {
+        errors.push({ line, text, message: "AnyOf requires at least one indented Stat condition" });
+      } else {
+        anyOfStats.push(group);
+      }
+      continue;
+    }
     switch (keyword) {
       case "name":
         when.names = splitList(remainder);
@@ -830,19 +894,9 @@ function parseRuleBlock(block, index) {
           errors.push({ line, text, message: "Type needs at least one item type" });
         break;
       case "stat": {
-        const match = /^(\S+)\s*([<>]=?|=)\s*(-?\d+(?:\.\d+)?)(%?)$/.exec(remainder);
-        if (!match) {
-          errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi >= 90%" (roll quality)' });
-          break;
-        }
-        const [, stat, op, rawValue, percent] = match;
-        if (op !== ">=" && op !== ">") {
-          errors.push({ line, text, message: "Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)" });
-          break;
-        }
-        const raw = Number(rawValue);
-        const value = op === ">" ? Math.floor(raw) + 1 : Math.ceil(raw);
-        stats.push(percent ? { stat, minRollPct: value } : { stat, minValue: value });
+        const condition = parseStat(line, text, remainder);
+        if (condition)
+          stats.push(condition);
         break;
       }
       case "anystat":
@@ -1007,6 +1061,8 @@ function parseRuleBlock(block, index) {
   }
   if (stats.length)
     when.stats = stats;
+  if (anyOfStats.length)
+    when.anyOfStats = anyOfStats;
   if (statMatchesLine !== undefined && stats.length) {
     const min = when.minStatMatches;
     const max = when.maxStatMatches;
@@ -1081,6 +1137,17 @@ function formatLootFilter(parsed) {
         out.push(`    Stat      ${stat.stat} >= ${stat.minValue}`);
       else
         out.push(`    Stat      ${stat.stat} >= 0`);
+    }
+    for (const group of w.anyOfStats ?? []) {
+      out.push("    AnyOf");
+      for (const stat of group) {
+        if (stat.minRollPct !== undefined)
+          out.push(`        Stat  ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
+        else if (stat.minValue !== undefined)
+          out.push(`        Stat  ${stat.stat} >= ${stat.minValue}`);
+        else
+          out.push(`        Stat  ${stat.stat} >= 0`);
+      }
     }
     const boundedStatMatches = w.minStatMatches !== undefined || w.maxStatMatches !== undefined;
     if (boundedStatMatches) {
@@ -1198,6 +1265,7 @@ const CONDITIONS = [
   ['Type', 'item type(s), comma separated'],
   ['Stat', 'Agi >= 3 (the printed value) or Agi >= 90% (roll quality)'],
   ['StatMatches', 'how many listed Stat conditions must match, e.g. >= 3'],
+  ['AnyOf', 'one indented Stat condition must match; each group is required'],
   ['AvgRollPct', 'average hidden roll percentage, e.g. < 35'],
   ['TopRolls', 'how many lines print their legal maximum, e.g. >= 2'],
   ['HighRolls', 'how many raw rolls reach Threshold, e.g. >= 2'],
