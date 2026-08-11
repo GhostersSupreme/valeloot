@@ -45,11 +45,9 @@ namespace ValeLoot;
 /// explicitly, on or off, rather than only touching matches: absence of a verdict is a value we write,
 /// not a case we skip.
 ///
-/// ## Cost
-///
-/// Painting is driven by the tab's own `Redraw`, so it runs when the panel actually changes — open,
-/// scroll, page, filter, sort, or an inventory mutation — and never per frame. One pass is a dictionary
-/// walk plus one delegate call per visible cell (~100 worst case at the game's page size).
+/// Painting is driven by the tab's own `Redraw`, so ordinary border and solid-fill rules run only
+/// when the panel changes. Hue rotation uses the existing main-thread frame hook, throttled to one
+/// update per four frames and bounded by the number of visible `holo` cells.
 /// </summary>
 internal static class InventoryPaint
 {
@@ -81,6 +79,9 @@ internal static class InventoryPaint
     private delegate IntPtr TransformFn(IntPtr self, IntPtr methodInfo);
     private delegate int CountFn(IntPtr self, IntPtr methodInfo);
     private delegate IntPtr GetChildFn(IntPtr self, int index, IntPtr methodInfo);
+    private delegate IntPtr StringFn(IntPtr self, IntPtr methodInfo);
+    [return: MarshalAs(UnmanagedType.I1)]
+    private delegate bool ObjectAliveFn(IntPtr self, IntPtr methodInfo);
 
     /**
      * One item's verdict: how loudly, in what colour, which rule said so, and what it sounds like.
@@ -92,6 +93,8 @@ internal static class InventoryPaint
     internal readonly struct Mark
     {
         public readonly int Level;
+        public readonly int Background;
+        public readonly bool Border;
         public readonly float R;
         public readonly float G;
         public readonly float B;
@@ -101,9 +104,19 @@ internal static class InventoryPaint
         /// <summary>Sound name to play if this uid is arriving, or null for silence.</summary>
         public readonly string? Sound;
 
-        public Mark(int level, (float R, float G, float B) rgb, string hex, string label, string rule, string? sound)
+        public Mark(
+            int level,
+            int background,
+            bool border,
+            (float R, float G, float B) rgb,
+            string hex,
+            string label,
+            string rule,
+            string? sound)
         {
             Level = level;
+            Background = background;
+            Border = border;
             R = rgb.R;
             G = rgb.G;
             B = rgb.B;
@@ -171,10 +184,38 @@ internal static class InventoryPaint
     private static CountFn? _getChildCount;
     private static GetChildFn? _getChild;
     private static VoidFn? _setAllDirty;
+    private static ObjectAliveFn? _objectAlive;
+    private static StringFn? _getName;
+    private static bool _backgroundReported;
     /// <summary>A `System.Type` for `UnityEngine.UI.Graphic`, for the non-generic component search.</summary>
     private static IntPtr _graphicType;
     /// <summary>Offset of `Graphic.m_Color`, written directly instead of through `set_color(Color)`.</summary>
     private static int _colorFieldOffset = -1;
+    /// <summary>A `System.Type` for the root `UnityEngine.UI.Image` that already draws each card.</summary>
+    private static IntPtr _imageType;
+    private static int _animationFrame;
+
+    private sealed class FillState
+    {
+        public IntPtr Handle;
+        public IntPtr Cell;
+        public float OriginalR;
+        public float OriginalG;
+        public float OriginalB;
+        public float OriginalA;
+        public float Strength;
+        public int Background;
+        public float Hue;
+        public float Saturation;
+        public float Value;
+    }
+
+    /// Root card Images currently recoloured by a full-background rule. A GC handle keeps the
+    /// il2cpp wrapper alive while a hue tick owns it; dead Unity objects are swept before any write.
+    /// </summary>
+    private static readonly Dictionary<IntPtr, FillState> _fills = new();
+    private static readonly Dictionary<IntPtr, IntPtr> _backgroundByCell = new();
+    private static readonly List<IntPtr> _deadFills = new();
     /// <summary>Logged once, as proof the tint reached a real graphic rather than merely resolving.</summary>
     private static bool _tintReported;
 
@@ -224,6 +265,8 @@ internal static class InventoryPaint
          */
         IntPtr cellClass = Il2CppMeta.FindClass("", "UIInventoryItem", HookCensus.GameAssemblies);
         _highlightFieldOffset = Il2CppMeta.FieldOffset(cellClass, "Highlight");
+        // The background is not this serialized Container field. A runtime hierarchy probe proved
+        // the rounded panel is the immediate child named `Background-Container`.
         if (_highlightFieldOffset < 0)
         {
             log("inventory paint NOT ready: UIInventoryItem.Highlight field did not resolve");
@@ -261,13 +304,17 @@ internal static class InventoryPaint
          * the difference between a degraded highlight and a dead one.
          */
         IntPtr component = Il2CppMeta.FindClass("UnityEngine", "Component", "UnityEngine.CoreModule.dll");
+        IntPtr unityObject = Il2CppMeta.FindClass("UnityEngine", "Object", "UnityEngine.CoreModule.dll");
         IntPtr transform = Il2CppMeta.FindClass("UnityEngine", "Transform", "UnityEngine.CoreModule.dll");
         IntPtr graphic = Il2CppMeta.FindClass("UnityEngine.UI", "Graphic", "UnityEngine.UI.dll", "Unity.ugui.dll");
+        IntPtr image = Il2CppMeta.FindClass("UnityEngine.UI", "Image", "UnityEngine.UI.dll", "Unity.ugui.dll");
         Il2CppMeta.MethodInfo? getComponent = Il2CppMeta.FindOverload(component, "GetComponent", "System.Type");
         Il2CppMeta.MethodInfo? getTransform = Il2CppMeta.FindOverload(component, "get_transform");
         Il2CppMeta.MethodInfo? childCount = Il2CppMeta.FindOverload(transform, "get_childCount");
         Il2CppMeta.MethodInfo? getChild = Il2CppMeta.FindOverload(transform, "GetChild", "System.Int32");
         Il2CppMeta.MethodInfo? setAllDirty = Il2CppMeta.FindOverload(graphic, "SetAllDirty");
+        Il2CppMeta.MethodInfo? objectAlive = Il2CppMeta.FindOverload(unityObject, "op_Implicit", "UnityEngine.Object");
+        Il2CppMeta.MethodInfo? getName = Il2CppMeta.FindOverload(unityObject, "get_name");
         _colorFieldOffset = Il2CppMeta.FieldOffsetUp(graphic, "m_Color");
 
         bool tintReady = getComponent is not null && getTransform is not null && childCount is not null
@@ -279,9 +326,20 @@ internal static class InventoryPaint
             _getChildCount = Marshal.GetDelegateForFunctionPointer<CountFn>(childCount!.NativePtr);
             _getChild = Marshal.GetDelegateForFunctionPointer<GetChildFn>(getChild!.NativePtr);
             _setAllDirty = Marshal.GetDelegateForFunctionPointer<VoidFn>(setAllDirty!.NativePtr);
-            // The non-generic component search wants a managed System.Type instance, not a class pointer.
+            _objectAlive = objectAlive is null
+                ? null
+                : Marshal.GetDelegateForFunctionPointer<ObjectAliveFn>(objectAlive.NativePtr);
+            // The non-generic component search wants managed System.Type instances, not class pointers.
             _graphicType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(graphic));
-            log($"inventory paint: tint path ready (Graphic.m_Color at 0x{_colorFieldOffset:x}, depth {TintDepth})");
+            bool fillReady = image != IntPtr.Zero && _objectAlive is not null && getName is not null;
+            _imageType = fillReady
+                ? IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(image))
+                : IntPtr.Zero;
+            _getName = fillReady
+                ? Marshal.GetDelegateForFunctionPointer<StringFn>(getName!.NativePtr)
+                : null;
+            log($"inventory paint: tint path ready (Graphic.m_Color at 0x{_colorFieldOffset:x}, depth {TintDepth}); "
+              + (fillReady ? "Background-Container child targeting ready" : "full background unavailable"));
         }
         else
         {
@@ -367,6 +425,7 @@ internal static class InventoryPaint
 
     public static void Uninstall()
     {
+        RestoreAllFills();
         for (int i = 0; i < _detours.Count; i++)
         {
             object? handle = _detours[i];
@@ -498,6 +557,8 @@ internal static class InventoryPaint
         if (rule is null || rule.Mute) return default;
         return new Mark(
             rule.Level,
+            rule.Background,
+            rule.Border,
             (rule.R, rule.G, rule.B),
             rule.Color,
             rule.Label.Length > 0 ? rule.Label : "",
@@ -513,7 +574,8 @@ internal static class InventoryPaint
      * indistinguishable from an ordinary match.
      */
     private static readonly Mark PinnedMark =
-        new(LootFilter.LevelGlow, LootFilter.ParseColor("#facc15"), "#facc15", "PINNED", "always shown", null);
+        new(LootFilter.LevelGlow, LootFilter.BackgroundBorder, true, LootFilter.ParseColor("#facc15"),
+            "#facc15", "PINNED", "always shown", null);
 
     /// <summary>Does the item's displayed name or catalog id equal one of these, case-insensitively?</summary>
     private static bool Named(LootFilter.ItemFacts facts, string[] names)
@@ -527,84 +589,264 @@ internal static class InventoryPaint
     }
 
     /**
-     * Write one cell's highlight: the rule's colour, at an intensity that says how loudly.
+     * Write one cell's presentation without covering its content.
      *
-     * The alpha is written DIRECTLY rather than through `SetHighlight`, which DOFades to a hardcoded 1.0
-     * and so can only say "lit". Three intensities are the difference between a panel where a quarter of
-     * the cells look identical and one where the eye lands on the triple top roll first. Nothing in the
-     * inventory tabs tweens this CanvasGroup (every `SetHighlight` caller is a picker or the wardrobe), so
-     * a direct write has nothing to race.
-     *
-     * The tint looks on the overlay object AND one level of children, because the first attempt asked the
-     * CanvasGroup's own object for a graphic, got null, and produced grey highlights at three correct
-     * intensities: a CanvasGroup is a grouping object, and the thing that draws sits beneath it.
-     *
-     * Colour is only written for a MARKED cell — an unmarked cell is invisible at alpha 0, so tinting it
-     * would be work nobody can see, and it keeps the walk bounded by the number of matches rather than by
-     * the size of the panel.
+     * The full-background modes tint the `Image` on the UIInventoryItem ROOT. That is the game's own
+     * dark card panel: it already sits behind the item art and text, and its sprite already owns the
+     * rounded corners. The Highlight subtree remains the border. Borrowing the overlay itself was
+     * wrong — a sprite-less overlay is a square drawn above the content, which hides the item.
      */
     private static void Draw(IntPtr cell, Mark mark)
     {
         IntPtr group = Marshal.ReadIntPtr(cell, _highlightFieldOffset);
         if (group == IntPtr.Zero) return;
 
-        _setAlpha?.Invoke(group, mark.Level switch { 3 => GlowAlpha, 2 => MarkAlpha, 1 => DotAlpha, _ => 0f }, IntPtr.Zero);
-        if (mark.Level == 0 || !TintEnabled || _getComponent is null || _graphicType == IntPtr.Zero) return;
+        float borderAlpha = mark.Border
+            ? mark.Level switch { 3 => GlowAlpha, 2 => MarkAlpha, 1 => DotAlpha, _ => 0f }
+            : 0f;
+        _setAlpha?.Invoke(group, borderAlpha, IntPtr.Zero);
+        if (_getComponent is null || _graphicType == IntPtr.Zero) return;
 
-        /**
-         * EVERY graphic in the overlay's subtree, not the first one found.
-         *
-         * The previous version tinted the CanvasGroup's own graphic and returned — and that object has
-         * one, so it never walked down to the frame the player can actually see. Result: the write
-         * landed ("tinted 1 graphic(s)") and nothing changed colour on screen. A short-circuit on the
-         * parent is indistinguishable from success in every signal the mod emits, which is why the probe
-         * below exists.
-         */
-        int painted = TintSubtree(group, mark, 0);
-        if (!_tintReported)
+        Mark visible = TintEnabled ? mark : default;
+        PaintBackground(cell, visible);
+        int painted = PaintSubtree(group, visible, 0);
+        if (mark.Level > 0 && TintEnabled && !_tintReported)
         {
             _tintReported = true;
-            _log?.Invoke($"inventory paint: first marked cell tinted {painted} graphic(s)");
+            _log?.Invoke($"inventory paint: first marked cell painted {painted} border graphic(s), background "
+                       + LootFilter.BackgroundName(mark.Background));
         }
     }
 
-    /// <summary>Tint this object's graphics and its descendants', bounded in depth and count.</summary>
-    private static int TintSubtree(IntPtr owner, Mark mark, int depth)
+    /// <summary>Paint or restore this object's graphics and descendants', bounded in depth and count.</summary>
+    private static int PaintSubtree(IntPtr owner, Mark mark, int depth)
     {
-        int painted = Tint(owner, mark);
+        int painted = PaintGraphic(owner, mark);
         if (depth >= TintDepth || _getTransform is null || _getChildCount is null || _getChild is null) return painted;
 
         IntPtr root = _getTransform(owner, IntPtr.Zero);
         if (root == IntPtr.Zero) return painted;
         int children = _getChildCount(root, IntPtr.Zero);
-        // Bounded: the overlay is a frame, not a scene graph, and this runs inside a hook on every
-        // repaint — an unbounded walk is how a highlight becomes a stutter.
         for (int i = 0; i < children && i < 8; i++)
         {
             IntPtr child = _getChild(root, i, IntPtr.Zero);
-            if (child != IntPtr.Zero) painted += TintSubtree(child, mark, depth + 1);
+            if (child != IntPtr.Zero) painted += PaintSubtree(child, mark, depth + 1);
         }
         return painted;
     }
 
-    /// <summary>Tint the graphic on one object, if it has one. Returns 1 when it did.</summary>
-    private static int Tint(IntPtr owner, Mark mark)
+    private static int PaintGraphic(IntPtr owner, Mark mark)
     {
+        if (mark.Level == 0) return 0;
         IntPtr graphic = _getComponent!(owner, _graphicType, IntPtr.Zero);
         if (graphic == IntPtr.Zero) return 0;
-        /**
-         * The colour is written as four floats at `m_Color` and then declared dirty.
-         *
-         * Alpha stays 1 here: intensity belongs to the CanvasGroup, so one value decides it. `SetAllDirty`
-         * is what makes the write visible — a field write alone leaves the mesh as it was until something
-         * else happens to rebuild it, which reads as "the tint works sometimes".
-         */
-        Marshal.WriteInt32(graphic, _colorFieldOffset, BitConverter.SingleToInt32Bits(mark.R));
-        Marshal.WriteInt32(graphic, _colorFieldOffset + 4, BitConverter.SingleToInt32Bits(mark.G));
-        Marshal.WriteInt32(graphic, _colorFieldOffset + 8, BitConverter.SingleToInt32Bits(mark.B));
-        Marshal.WriteInt32(graphic, _colorFieldOffset + 12, BitConverter.SingleToInt32Bits(1f));
-        _setAllDirty?.Invoke(graphic, IntPtr.Zero);
+        WriteColor(graphic, mark.R, mark.G, mark.B, 1f);
         return 1;
+    }
+
+    private static void PaintBackground(IntPtr cell, Mark mark)
+    {
+        if (_imageType == IntPtr.Zero || _getName is null) return;
+
+        if (mark.Level == 0 || mark.Background == LootFilter.BackgroundBorder)
+        {
+            if (_backgroundByCell.TryGetValue(cell, out IntPtr existing)) RestoreFill(existing);
+            return;
+        }
+
+        if (!_backgroundByCell.TryGetValue(cell, out IntPtr image))
+        {
+            image = FindBackgroundImage(cell);
+            if (image == IntPtr.Zero) return;
+            _backgroundByCell[cell] = image;
+        }
+        ApplyFill(cell, image, mark);
+    }
+
+    private static IntPtr FindBackgroundImage(IntPtr cell)
+    {
+        if (_getTransform is null || _getChildCount is null || _getChild is null) return IntPtr.Zero;
+        IntPtr root = _getTransform(cell, IntPtr.Zero);
+        if (root == IntPtr.Zero) return IntPtr.Zero;
+        int children = _getChildCount(root, IntPtr.Zero);
+        for (int i = 0; i < children && i < 12; i++)
+        {
+            IntPtr child = _getChild(root, i, IntPtr.Zero);
+            if (child == IntPtr.Zero) continue;
+            IntPtr image = _getComponent!(child, _imageType, IntPtr.Zero);
+            if (image == IntPtr.Zero) continue;
+            string? name = Il2CppMeta.ReadString(_getName!(image, IntPtr.Zero));
+            if (string.Equals(name, "Background-Container", StringComparison.Ordinal)) return image;
+        }
+        return IntPtr.Zero;
+    }
+
+    private static void ApplyFill(IntPtr cell, IntPtr image, Mark mark)
+    {
+        if (!_fills.TryGetValue(image, out FillState? state))
+        {
+            state = new FillState
+            {
+                Handle = IL2CPP.il2cpp_gchandle_new(image, false),
+                Cell = cell,
+                OriginalR = ReadFloat(image, _colorFieldOffset),
+                OriginalG = ReadFloat(image, _colorFieldOffset + 4),
+                OriginalB = ReadFloat(image, _colorFieldOffset + 8),
+                OriginalA = ReadFloat(image, _colorFieldOffset + 12),
+            };
+            _fills.Add(image, state);
+            if (!_backgroundReported)
+            {
+                _backgroundReported = true;
+                _log?.Invoke("inventory paint: full background applied to rounded Background-Container");
+            }
+        }
+
+        state.Background = mark.Background;
+        state.Strength = mark.Level switch { 3 => GlowAlpha, 2 => MarkAlpha, _ => DotAlpha };
+        RgbToHsv(mark.R, mark.G, mark.B, out state.Hue, out state.Saturation, out state.Value);
+        // A grey or nearly-black holo colour still has to rotate visibly.
+        if (state.Background == LootFilter.BackgroundHolo)
+        {
+            state.Saturation = Math.Max(state.Saturation, 0.65f);
+            state.Value = Math.Max(state.Value, 0.55f);
+        }
+
+        if (state.Background == LootFilter.BackgroundHolo)
+        {
+            HoloColor(state, out float r, out float g, out float b);
+            WriteBackground(image, state, r, g, b);
+        }
+        else
+        {
+            WriteBackground(image, state, mark.R, mark.G, mark.B);
+        }
+    }
+
+    private static void RestoreFill(IntPtr image)
+    {
+        if (!_fills.TryGetValue(image, out FillState? state)) return;
+        ReleaseFill(image, state, restore: true);
+    }
+
+    private static void ReleaseFill(IntPtr image, FillState state, bool restore)
+    {
+        IntPtr target = IL2CPP.il2cpp_gchandle_get_target(state.Handle);
+        if (restore && target != IntPtr.Zero && (_objectAlive?.Invoke(target, IntPtr.Zero) ?? false))
+        {
+            WriteColor(target, state.OriginalR, state.OriginalG, state.OriginalB, state.OriginalA);
+        }
+        IL2CPP.il2cpp_gchandle_free(state.Handle);
+        _fills.Remove(image);
+        _backgroundByCell.Remove(state.Cell);
+    }
+
+    private static void RestoreAllFills()
+    {
+        _deadFills.Clear();
+        foreach (IntPtr image in _fills.Keys) _deadFills.Add(image);
+        for (int i = 0; i < _deadFills.Count; i++)
+        {
+            IntPtr image = _deadFills[i];
+            if (_fills.TryGetValue(image, out FillState? state)) ReleaseFill(image, state, restore: true);
+        }
+        _deadFills.Clear();
+        _backgroundByCell.Clear();
+    }
+
+    /**
+     * Advance visible hue backgrounds from the one existing PlayerSave.Update hook.
+     *
+     * Four-frame throttling is 15 Hz at the game's usual 60 fps: smooth enough for a slow hue wheel,
+     * while a bag full of ordinary border/fill rules costs only one integer comparison per frame.
+     */
+    public static void Tick()
+    {
+        if ((_animationFrame++ & 3) != 0 || _fills.Count == 0) return;
+
+        _deadFills.Clear();
+        foreach ((IntPtr image, FillState state) in _fills)
+        {
+            IntPtr target = IL2CPP.il2cpp_gchandle_get_target(state.Handle);
+            if (target == IntPtr.Zero || !(_objectAlive?.Invoke(target, IntPtr.Zero) ?? false))
+            {
+                _deadFills.Add(image);
+                continue;
+            }
+            if (state.Background != LootFilter.BackgroundHolo) continue;
+
+            HoloColor(state, out float r, out float g, out float b);
+            WriteBackground(target, state, r, g, b);
+        }
+
+        for (int i = 0; i < _deadFills.Count; i++)
+        {
+            IntPtr image = _deadFills[i];
+            if (_fills.TryGetValue(image, out FillState? state)) ReleaseFill(image, state, restore: false);
+        }
+    }
+
+    private static void HoloColor(FillState state, out float r, out float g, out float b)
+    {
+        float phase = (Environment.TickCount64 % 8000L) / 8000f;
+        HsvToRgb((state.Hue + phase) % 1f, state.Saturation, state.Value, out r, out g, out b);
+    }
+
+    private static void RgbToHsv(float r, float g, float b, out float h, out float s, out float v)
+    {
+        float max = Math.Max(r, Math.Max(g, b));
+        float min = Math.Min(r, Math.Min(g, b));
+        float delta = max - min;
+        v = max;
+        s = max <= 0f ? 0f : delta / max;
+        if (delta <= 0f) { h = 0f; return; }
+        if (max == r) h = ((g - b) / delta) % 6f;
+        else if (max == g) h = ((b - r) / delta) + 2f;
+        else h = ((r - g) / delta) + 4f;
+        h /= 6f;
+        if (h < 0f) h += 1f;
+    }
+
+    private static void HsvToRgb(float h, float s, float v, out float r, out float g, out float b)
+    {
+        float scaled = h * 6f;
+        int sector = (int)Math.Floor(scaled);
+        float fraction = scaled - sector;
+        float p = v * (1f - s);
+        float q = v * (1f - s * fraction);
+        float t = v * (1f - s * (1f - fraction));
+        switch (sector % 6)
+        {
+            case 0: r = v; g = t; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+    }
+
+    private static float ReadFloat(IntPtr owner, int offset)
+        => BitConverter.Int32BitsToSingle(Marshal.ReadInt32(owner, offset));
+
+    private static void WriteBackground(IntPtr image, FillState state, float r, float g, float b)
+    {
+        float keep = 1f - state.Strength;
+        WriteColor(
+            image,
+            state.OriginalR * keep + r * state.Strength,
+            state.OriginalG * keep + g * state.Strength,
+            state.OriginalB * keep + b * state.Strength,
+            state.OriginalA);
+    }
+
+    private static void WriteColor(IntPtr graphic, float r, float g, float b, float a)
+    {
+        Marshal.WriteInt32(graphic, _colorFieldOffset, BitConverter.SingleToInt32Bits(r));
+        Marshal.WriteInt32(graphic, _colorFieldOffset + 4, BitConverter.SingleToInt32Bits(g));
+        Marshal.WriteInt32(graphic, _colorFieldOffset + 8, BitConverter.SingleToInt32Bits(b));
+        Marshal.WriteInt32(graphic, _colorFieldOffset + 12, BitConverter.SingleToInt32Bits(a));
+        _setAllDirty?.Invoke(graphic, IntPtr.Zero);
     }
 
     /// <summary>What this is doing, for the log — the counters that separate "installed" from "drawing".</summary>

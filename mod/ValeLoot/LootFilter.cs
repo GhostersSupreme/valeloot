@@ -237,6 +237,26 @@ internal static class LootFilter
     public const int LevelDot = 1;
     public const int LevelMark = 2;
     public const int LevelGlow = 3;
+    public const int BackgroundBorder = 0;
+    public const int BackgroundFill = 1;
+    public const int BackgroundHolo = 2;
+
+    /// <summary>`border`/`fill`/`holo` -> background mode, or -1 for anything else.</summary>
+    public static int ParseBackground(string word) => word switch
+    {
+        "border" => BackgroundBorder,
+        "fill" => BackgroundFill,
+        "holo" => BackgroundHolo,
+        _ => -1,
+    };
+
+    public static string BackgroundName(int background) => background switch
+    {
+        BackgroundFill => "fill",
+        BackgroundHolo => "holo",
+        _ => "border",
+    };
+
 
     /// <summary>`dot`/`mark`/`glow` -> level, or 0 for anything else.</summary>
     public static int ParseLevel(string word) => word switch
@@ -286,6 +306,10 @@ internal static class LootFilter
         public float B = 0.5f;
         public string Label = "";
         public int Level = LevelDot;
+        /// <summary>Border-only, solid full-cell fill, or a hue-rotating full-cell fill.</summary>
+        public int Background = BackgroundBorder;
+        /// <summary>Whether the game's rounded selection frame remains visible around this match.</summary>
+        public bool Border = true;
         /// <summary>Played once when a match first appears in the bag. Null for silence.</summary>
         public string? Sound;
         /**

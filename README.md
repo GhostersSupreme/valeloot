@@ -6,7 +6,7 @@ when a matching item is picked up.
 
 It is complete on its own. No companion app, no server, no account, nothing to sign up for.
 
-> ### ⬇ [Download ValeLoot 0.3.3](https://github.com/bjb2/valeloot/releases/download/v0.3.3/ValeLoot-0.3.3-with-BepInEx.zip)
+> ### ⬇ [Download ValeLoot 0.3.4](https://github.com/bjb2/valeloot/releases/download/v0.3.4/ValeLoot-0.3.4-with-BepInEx.zip)
 >
 > Unzip it into your SpiritVale folder, launch the game, press **F8**.
 >
@@ -120,10 +120,11 @@ you come back.
 
 ## Writing rules
 
-Rules live in `BepInEx/config/valeloot-filter.txt`, and a worked example ships in it. The language is a
-deliberate lift from the loot filters players already know from Path of Exile and Diablo: an **ordered list
-where the first match wins**, so specific rules go at the top and broad ones at the bottom, and you never
-have to think about overlap — only about priority.
+Rules live in `BepInEx/config/valeloot-filter.txt`. A focused 28-rule category filter ships on a fresh
+install: artifacts, mixed physical/magic rejection, ATK/MAGIC/DEF/MDEF/general tiers, and distinct
+frame, flat-fill, and holo treatments. Existing filter files are never replaced. The language is an
+**ordered list where the first match wins**, so specific rules go at the top and broad ones at the bottom,
+and you never have to think about overlap — only about priority.
 
 ```
 Threshold 90
@@ -162,6 +163,18 @@ Hide "vendor trash"
 | `Refine >= 5` | refine level at least this |
 | `Favorite` | the star you put on it in game |
 | `AlwaysShow "…"` / `AlwaysHide "…"` | one item by name, ignoring rule order entirely |
+
+Presentation lines belong on `Show` blocks:
+
+| Line | Effect |
+|---|---|
+| `Color #4ade80` | colour used by the frame, full background, tag, and hover note |
+| `Highlight dot`&#124;`mark`&#124;`glow` | treatment strength |
+| `Background border`&#124;`fill`&#124;`holo` | frame only (default), a flat full-card colour, or a rotating hue |
+| `Border off` | remove the coloured frame; useful with `Background fill` or `Background holo` |
+| `Tag KEEP` | short label |
+| `Sound chime` | pickup sound |
+
 
 **The `%` is a real distinction.** `Stat Agi >= 90%` asks how *well* the line rolled;
 `Stat Agi >= 3` asks what it *prints*. They are different questions with different answers: a 0% roll

@@ -47,6 +47,8 @@ function rule(r: LootRule): string {
     `, "label": ${str(r.label ?? '')}` +
     // `highlight` here, `Level` (an int) there. Both render to the same three words.
     `, "level": ${str(r.highlight ?? 'dot')}` +
+    `, "background": ${str(r.background ?? 'border')}` +
+    `, "border": ${r.border !== false}` +
     `, "sound": ${r.sound === undefined ? 'null' : str(r.sound)}` +
     `, "mute": ${r.mute === true}` +
     `, "when": {"names": ${nullableStrings(w.names)}` +

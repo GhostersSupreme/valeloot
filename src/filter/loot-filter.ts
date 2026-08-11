@@ -167,6 +167,9 @@ export interface LootCondition {
 export type LootHighlight = 'dot' | 'mark' | 'glow';
 export const LOOT_HIGHLIGHTS: readonly LootHighlight[] = ['dot', 'mark', 'glow'];
 
+export type LootBackground = 'border' | 'fill' | 'holo';
+export const LOOT_BACKGROUNDS: readonly LootBackground[] = ['border', 'fill', 'holo'];
+
 /**
  * Sounds the overlay can make with nothing on disk: each is synthesised in the HUD's audio graph, so a
  * fresh install has usable sounds and this repo ships no binary assets.
@@ -193,8 +196,12 @@ export interface LootRule {
   id: string;
   name: string;
   enabled: boolean;
-  /** Hex colour used for the border, tag and text in the overlay. */
+  /** Base colour used for the border, tag, and optional full-cell background. */
   color: string;
+  /** Border-only by default, a solid fill, or a continuously hue-rotating fill. */
+  background?: LootBackground;
+  /** Keep the rounded selection frame. Absent means true. */
+  border?: boolean;
   /** Short tag, e.g. "KEEP". Falls back to the rule name. */
   label?: string;
   /** How loudly to draw a match. Absent means `dot`. */
@@ -234,6 +241,8 @@ export interface LootMatch {
   color: string;
   label: string;
   highlight: LootHighlight;
+  background: LootBackground;
+  border: boolean;
   /** Null when the rule asks for no sound — the common case. */
   sound: string | null;
   mute: boolean;
@@ -297,6 +306,8 @@ export function matchLoot(item: OwnedGear, rules: readonly LootRule[], context: 
       name: rule.name,
       color: rule.color,
       label: rule.label ?? rule.name,
+      background: rule.background ?? 'border',
+      border: rule.border !== false,
       highlight: rule.highlight ?? 'dot',
       sound: rule.sound ?? null,
       mute: Boolean(rule.mute),
@@ -446,6 +457,9 @@ export function normalizeLootRules(input: unknown): LootRule[] {
     const highlight: LootHighlight = LOOT_HIGHLIGHTS.includes(candidate.highlight as LootHighlight)
       ? candidate.highlight as LootHighlight
       : candidate.flash ? 'glow' : 'dot';
+    const background: LootBackground = LOOT_BACKGROUNDS.includes(candidate.background as LootBackground)
+      ? candidate.background as LootBackground
+      : 'border';
     const sound = normalizeSoundName(candidate.sound);
     rules.push({
       id,
@@ -454,6 +468,8 @@ export function normalizeLootRules(input: unknown): LootRule[] {
       color: /^#[0-9a-f]{6}$/i.test(String(candidate.color)) ? String(candidate.color) : '#4ade80',
       ...(candidate.label ? { label: String(candidate.label).slice(0, 12) } : {}),
       highlight,
+      background,
+      border: candidate.border !== false,
       ...(sound ? { sound } : {}),
       ...(candidate.mute === true || candidate.action === 'dismantle' ? { mute: true } : {}),
       when: normalizeCondition(candidate.when),

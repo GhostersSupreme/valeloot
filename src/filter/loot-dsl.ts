@@ -81,8 +81,8 @@
  * `parseLootFilter` never emits a partially-understood rule.
  */
 import {
-  LOOT_HIGHLIGHTS, canonicalStatName, normalizeSoundName,
-  type LootCondition, type LootHighlight, type LootRule, type StatCondition,
+  LOOT_BACKGROUNDS, LOOT_HIGHLIGHTS, canonicalStatName, normalizeSoundName,
+  type LootBackground, type LootCondition, type LootHighlight, type LootRule, type StatCondition,
 } from './loot-filter.ts';
 import type { ItemOverrides, Verdict } from './types.ts';
 
@@ -266,6 +266,8 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
   let color = block.kind === 'hide' ? '#6b7a73' : '#4ade80';
   let label: string | undefined;
   let highlight: LootHighlight | undefined;
+  let background: LootBackground = 'border';
+  let border = true;
   let sound: string | undefined;
   let statModeExplicit = false;
   let statMatchesLine: number | undefined;
@@ -495,6 +497,22 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
         highlight = wanted as LootHighlight;
         break;
       }
+      case 'background': {
+        const wanted = remainder.toLowerCase();
+        if (!LOOT_BACKGROUNDS.includes(wanted as LootBackground)) {
+          errors.push({ line, text, message: `Background needs one of: ${LOOT_BACKGROUNDS.join(', ')}` });
+          break;
+        }
+        background = wanted as LootBackground;
+        break;
+      }
+      case 'border': {
+        const wanted = remainder.toLowerCase();
+        if (wanted === 'on') border = true;
+        else if (wanted === 'off') border = false;
+        else errors.push({ line, text, message: 'Border needs one of: on, off' });
+        break;
+      }
       // How `Highlight glow` was spelled before there were levels. Kept so saved filters keep parsing.
       case 'flash': highlight = 'glow'; break;
       case 'sound': {
@@ -547,6 +565,8 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
     color,
     ...(label ? { label } : {}),
     highlight: highlight ?? 'dot',
+    background,
+    border,
     ...(sound ? { sound } : {}),
     ...(block.kind === 'hide' ? { mute: true as const } : {}),
     when,
@@ -565,13 +585,13 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
     });
   }
 
-  // Decoration a Hide block cannot honour. Silently accepting it means an author who asked for a sound
-  // gets silence and no explanation, which is the hardest kind of filter bug to see.
-  if (block.kind === 'hide' && (sound || highlight)) {
+  // Decoration a Hide block cannot honour. Silently accepting it means an author who asked for a
+  // visible treatment gets darkness and no explanation, which is the hardest filter bug to see.
+  if (block.kind === 'hide' && (sound || highlight || background !== 'border' || !border)) {
     errors.push({
       line: block.startLine,
       text: `Hide "${block.name}"`,
-      message: 'a Hide block draws nothing and plays nothing — remove its Highlight/Sound, or make it a Show block',
+      message: 'a Hide block draws nothing and plays nothing — remove its Highlight/Background/Border/Sound, or make it a Show block',
     });
   }
 
@@ -658,6 +678,8 @@ export function formatLootFilter(parsed: Pick<ParsedFilter, 'rules' | 'overrides
     // printing every colour would bury the two lines a reader is actually looking at in boilerplate.
     if (rule.color && rule.color !== (rule.mute ? '#6b7a73' : '#4ade80')) out.push(`    Color     ${rule.color}`);
     if (rule.highlight && rule.highlight !== 'dot') out.push(`    Highlight ${rule.highlight}`);
+    if (rule.background && rule.background !== 'border') out.push(`    Background ${rule.background}`);
+    if (rule.border === false) out.push('    Border     off');
     if (rule.sound) out.push(`    Sound     ${rule.sound}`);
     out.push('');
   }

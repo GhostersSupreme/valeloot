@@ -299,8 +299,9 @@ You can keep editing the filter file by hand instead; it is a text file and noth
 WRITING RULES
 -------------
 
-Your filter is BepInEx/config/valeloot-filter.txt. It is written for you, with a working example, the
-first time the mod runs. Save it and the game picks it up on the next inventory redraw.
+Your filter is BepInEx/config/valeloot-filter.txt. A focused 28-rule category filter is written only
+when that file does not exist; AN EXISTING FILTER IS NEVER REPLACED. Save it and the game picks the
+change up on the next inventory redraw.
 
 Rules are tried IN ORDER and the FIRST MATCH WINS, so specific rules go at the top and broad ones at
 the bottom. That ordering is the whole trick: you stop thinking about overlap.
@@ -383,6 +384,8 @@ Decorations, on Show blocks only:
     Color #4ade80               the cell's colour, and the colour of the hover note
     Tag KEEP                    a short word, shown in the hover note. Up to 12 characters.
     Highlight dot|mark|glow     how loud
+    Background border|fill|holo frame only (default), flat full-card colour, or rotating hue
+    Border off                    remove the coloured frame; pair with fill or holo
     Sound chime                 played when you pick a match up, bag open or closed
 
 Rolls versus printed values - the % is the question

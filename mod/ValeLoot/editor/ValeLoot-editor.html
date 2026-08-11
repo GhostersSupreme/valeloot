@@ -198,30 +198,28 @@ main{flex:1;display:grid;grid-template-columns:400px 1fr;min-height:0}
   padding:5px;display:flex;flex-direction:column;cursor:pointer;overflow:hidden;
   transition:transform .1s}
 .cell:hover{transform:translateY(-1px)}
-/* Falls off toward the bottom, where the name is: a highlight overlay, not a coat of paint. */
+/* Border remains the quiet default. Full backgrounds use the same level alpha as the game. */
 .cell .tint{position:absolute;inset:0;opacity:0;pointer-events:none;transition:opacity .18s;
-  background:linear-gradient(180deg,var(--c) 0%,color-mix(in srgb,var(--c) 22%,transparent) 100%)}
+  background:var(--c)}
 .cell .ring{position:absolute;inset:0;border-radius:3px;pointer-events:none;
   border:1px solid transparent;transition:border-color .18s,box-shadow .18s}
-/**
- * The three levels, in the mod's proportions rather than its literal alphas.
- *
- * In game the highlight sits over an item ICON, so CanvasGroup.alpha 1.0 still leaves something to
- * look at. Here the cell IS the name, and a full-strength fill turned every glow into a solid
- * rectangle you could not read — the picture stopped being an inventory slot. So the fill is scaled
- * down and the difference is carried by the ring and the glow, which is where the eye reads
- * intensity anyway. What has to survive is the ORDER: dot barely lit, mark clearly lit, glow
- * unmistakable and moving.
- */
-.cell.lv1 .tint{opacity:.16}
 .cell.lv1 .ring{border-color:color-mix(in srgb,var(--c) 40%,transparent)}
-.cell.lv2 .tint{opacity:.34}
 .cell.lv2 .ring{border-color:var(--c);box-shadow:inset 0 0 10px color-mix(in srgb,var(--c) 45%,transparent)}
-.cell.lv3 .tint{opacity:.52}
 .cell.lv3 .ring{border-color:var(--c);animation:pulse 1.5s ease-in-out infinite}
+.cell.no-border .ring{display:none}
+.cell.bg-fill.lv1 .tint,.cell.bg-holo.lv1 .tint{opacity:.20}
+.cell.bg-fill.lv2 .tint,.cell.bg-holo.lv2 .tint{opacity:.42}
+.cell.bg-fill.lv3 .tint,.cell.bg-holo.lv3 .tint{opacity:.68}
+.cell.bg-holo .tint{animation:huecycle 8s linear infinite}
+.cell.bg-holo.lv3 .ring{animation:pulse 1.5s ease-in-out infinite,huecycle 8s linear infinite}
+.lvl[data-border="off"] .demo{border-color:transparent}
 @keyframes pulse{
   0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--c) 55%,transparent),inset 0 0 12px color-mix(in srgb,var(--c) 50%,transparent)}
   50%{box-shadow:0 0 14px 3px color-mix(in srgb,var(--c) 75%,transparent),inset 0 0 20px color-mix(in srgb,var(--c) 70%,transparent)}
+}
+@keyframes huecycle{to{filter:hue-rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){
+  .cell .ring,.cell.bg-holo .tint{animation:none}
 }
 /* Unclaimed is quiet, not unreadable: "no rule touches this" is a thing the player looks for. */
 .cell.dim{opacity:.7}
@@ -575,6 +573,7 @@ function canonicalStatName(input) {
   return match?.internal ?? input;
 }
 var LOOT_HIGHLIGHTS = ["dot", "mark", "glow"];
+var LOOT_BACKGROUNDS = ["border", "fill", "holo"];
 var BUILTIN_LOOT_SOUNDS = ["blip", "chime", "ding", "alert", "thud"];
 function normalizeSoundName(input) {
   if (typeof input !== "string")
@@ -593,6 +592,8 @@ function matchLoot(item, rules, context) {
       name: rule.name,
       color: rule.color,
       label: rule.label ?? rule.name,
+      background: rule.background ?? "border",
+      border: rule.border !== false,
       highlight: rule.highlight ?? "dot",
       sound: rule.sound ?? null,
       mute: Boolean(rule.mute)
@@ -825,6 +826,8 @@ function parseRuleBlock(block, index) {
   let color = block.kind === "hide" ? "#6b7a73" : "#4ade80";
   let label;
   let highlight;
+  let background = "border";
+  let border = true;
   let sound;
   let statModeExplicit = false;
   let statMatchesLine;
@@ -1064,6 +1067,25 @@ function parseRuleBlock(block, index) {
         highlight = wanted;
         break;
       }
+      case "background": {
+        const wanted = remainder.toLowerCase();
+        if (!LOOT_BACKGROUNDS.includes(wanted)) {
+          errors.push({ line, text, message: `Background needs one of: ${LOOT_BACKGROUNDS.join(", ")}` });
+          break;
+        }
+        background = wanted;
+        break;
+      }
+      case "border": {
+        const wanted = remainder.toLowerCase();
+        if (wanted === "on")
+          border = true;
+        else if (wanted === "off")
+          border = false;
+        else
+          errors.push({ line, text, message: "Border needs one of: on, off" });
+        break;
+      }
       case "flash":
         highlight = "glow";
         break;
@@ -1113,6 +1135,8 @@ function parseRuleBlock(block, index) {
     color,
     ...label ? { label } : {},
     highlight: highlight ?? "dot",
+    background,
+    border,
     ...sound ? { sound } : {},
     ...block.kind === "hide" ? { mute: true } : {},
     when
@@ -1124,11 +1148,11 @@ function parseRuleBlock(block, index) {
       message: 'a Hide block with no conditions silences EVERYTHING — name it "everything" if you truly mean it'
     });
   }
-  if (block.kind === "hide" && (sound || highlight)) {
+  if (block.kind === "hide" && (sound || highlight || background !== "border" || !border)) {
     errors.push({
       line: block.startLine,
       text: `Hide "${block.name}"`,
-      message: "a Hide block draws nothing and plays nothing — remove its Highlight/Sound, or make it a Show block"
+      message: "a Hide block draws nothing and plays nothing — remove its Highlight/Background/Border/Sound, or make it a Show block"
     });
   }
   return { rule, errors };
@@ -1223,6 +1247,10 @@ function formatLootFilter(parsed) {
       out.push(`    Color     ${rule.color}`);
     if (rule.highlight && rule.highlight !== "dot")
       out.push(`    Highlight ${rule.highlight}`);
+    if (rule.background && rule.background !== "border")
+      out.push(`    Background ${rule.background}`);
+    if (rule.border === false)
+      out.push("    Border     off");
     if (rule.sound)
       out.push(`    Sound     ${rule.sound}`);
     out.push("");
@@ -1274,9 +1302,18 @@ const LEVELS = [
   ['mark', 'clearly lit — worth a second look'],
   ['glow', 'unmistakable, and it pulses'],
 ];
+const BACKGROUNDS = [
+  ['border', 'colour the frame only — the default'],
+  ['fill', 'recolour the full card background'],
+  ['holo', 'rotate the full background through the hue wheel'],
+];
+const BORDERS = [
+  ['on', 'keep the rounded colour frame — the default'],
+  ['off', 'draw only the full background, without a frame'],
+];
 
 const KEYWORDS = [
-  ['Show', 'present matching items — colour, tag, intensity, sound'],
+  ['Show', 'present matching items — colour, background, tag, intensity, sound'],
   ['Hide', 'claim matching items, then say nothing about them'],
   ['AlwaysShow', 'always light this item up, by name — beats every rule'],
   ['AlwaysHide', 'never light this item, by name — beats every rule'],
@@ -1302,6 +1339,8 @@ const CONDITIONS = [
   ['AllStats', 'match every listed stat'],
   ['Tag', 'short label drawn on the cell'],
   ['Highlight', 'dot, mark or glow'],
+  ['Background', 'border, fill or holo'],
+  ['Border', 'on or off'],
   ['Sound', 'plays as one lands'],
   ['Color', '#rrggbb'],
 ];
@@ -1434,6 +1473,13 @@ function blockLevel(block) {
   const line = block.deco.highlight;
   const wanted = line ? line.rest.toLowerCase() : 'dot';
   return LEVELS.some(([name]) => name === wanted) ? wanted : 'dot';
+}
+function blockBackground(block) {
+  const wanted = block.deco.background ? block.deco.background.rest.toLowerCase() : 'border';
+  return BACKGROUNDS.some(([name]) => name === wanted) ? wanted : 'border';
+}
+function blockBorder(block) {
+  return !(block.deco.border && block.deco.border.rest.toLowerCase() === 'off');
 }
 
 // ───────────────────── lint: what the MOD will refuse ─────────────────────
@@ -1742,7 +1788,10 @@ function evaluate(text) {
       continue;
     }
     if (named(item, pins)) {
-      marks.set(item.uid, { kind: 'pinned', color: PIN_COLOR, level: 'glow', label: 'PINNED', rule: 'always shown' });
+      marks.set(item.uid, {
+        kind: 'pinned', color: PIN_COLOR, level: 'glow', background: 'border', border: true,
+        label: 'PINNED', rule: 'always shown',
+      });
       lit++; pinned++;
       continue;
     }
@@ -1767,6 +1816,7 @@ function evaluate(text) {
     } else {
       marks.set(item.uid, {
         kind: 'lit', by: claimed, color: blockColor(block), level: blockLevel(block),
+        background: blockBackground(block), border: blockBorder(block),
         label: rule.label || '', rule: rule.name,
       });
       lit++;
@@ -1856,7 +1906,12 @@ function renderGrid() {
     // by nothing, which is the exact opposite of what the player asked for.
     const lit = mark && (mark.kind === 'lit' || mark.kind === 'pinned');
     const cls = ['cell'];
-    if (lit) { cls.push('lit', levelClass(mark.level)); } else { cls.push('dim'); }
+    if (lit) {
+      cls.push('lit', levelClass(mark.level), 'bg-' + mark.background);
+      if (mark.border === false) cls.push('no-border');
+    } else {
+      cls.push('dim');
+    }
     if (item.uid === selectedUid) cls.push('sel');
     if (why) cls.push('matched');
     const color = lit ? mark.color : '#000000';
@@ -1918,7 +1973,7 @@ function statLine(item) {
 }
 
 function condCrumbs(block) {
-  const skip = ['color', 'colour', 'highlight', 'sound', 'tag', 'flash'];
+  const skip = ['color', 'colour', 'highlight', 'background', 'border', 'sound', 'tag', 'flash'];
   const parts = block.body.filter((l) => !skip.includes(l.key)).map((l) => l.text.replace(/\s+/g, ' '));
   if (!parts.length) return '<em>no conditions — this claims everything below it</em>';
   return parts.map((p) => esc(p)).join('<span> · </span>');
@@ -1927,6 +1982,8 @@ function condCrumbs(block) {
 function ruleRow(block, index) {
   const color = blockColor(block);
   const level = blockLevel(block);
+  const background = blockBackground(block);
+  const border = blockBorder(block);
   const hide = block.kind === 'hide';
   const open = openRule === index;
   const share = plan.total ? Math.round((block.count / plan.total) * 100) : 0;
@@ -2004,6 +2061,26 @@ function ruleRow(block, index) {
           + '</button>').join('')
         + '</div></div>';
     }
+
+    html += '<div class="fieldrow"><span class="lbl">background</span>'
+      + '<button class="chip" data-pick="background">' + background + '</button></div>';
+    if (openPicker === 'background') {
+      html += '<div class="popout"><div class="lvls" style="--c:' + esc(color) + '">'
+        + BACKGROUNDS.map(([name, help]) => '<button class="lvl ' + (name === background ? 'on' : '') + '"'
+          + ' data-background="' + name + '" title="' + esc(help) + '"><span class="demo"></span>' + name
+          + '</button>').join('')
+        + '</div></div>';
+    }
+    html += '<div class="fieldrow"><span class="lbl">border</span>'
+      + '<button class="chip" data-pick="border">' + (border ? 'on' : 'off') + '</button></div>';
+    if (openPicker === 'border') {
+      html += '<div class="popout"><div class="lvls" style="--c:' + esc(color) + '">'
+        + BORDERS.map(([name, help]) => '<button class="lvl ' + ((name === 'on') === border ? 'on' : '') + '"'
+          + ' data-border="' + name + '" title="' + esc(help) + '"><span class="demo"></span>' + name
+          + '</button>').join('')
+        + '</div></div>';
+    }
+
 
     const sound = block.deco.sound ? block.deco.sound.rest : '';
     html += '<div class="fieldrow"><span class="lbl">sound</span>'
@@ -2136,12 +2213,15 @@ function setHead(index, kind, name) {
   const block = parseBlocks(src.value)[index];
   if (!block) return;
   lines[block.head] = (kind === 'hide' ? 'Hide' : 'Show') + ' "' + String(name).replace(/"/g, "'") + '"';
-  // The parser REFUSES a Hide block carrying Highlight or Sound rather than swallowing the request,
-  // so dropping those as the verb flips is the only way the flip is not instantly an error the
-  // author never typed.
+  // The parser REFUSES a Hide block carrying visible or audible decoration rather than swallowing
+  // the request, so dropping those as the verb flips is the only way the flip is not instantly an
+  // error the author never typed.
   if (kind === 'hide') {
     for (const line of [...block.body].reverse()) {
-      if (line.key === 'highlight' || line.key === 'sound' || line.key === 'flash') lines.splice(line.line, 1);
+      if (line.key === 'highlight' || line.key === 'background' || line.key === 'border'
+          || line.key === 'sound' || line.key === 'flash') {
+        lines.splice(line.line, 1);
+      }
     }
   }
   apply(lines);
@@ -2223,7 +2303,7 @@ function highlightLine(line) {
     if (lower === 'hide' || lower === 'alwayshide' || lower === 'mute') cls = 'k-hide';
     else if (BLOCK_WORDS[lower] || OVERRIDE_WORDS[lower] || lower === 'threshold') cls = 'k-show';
   } else {
-    const deco = ['highlight', 'sound', 'tag', 'color', 'colour', 'flash'].includes(lower);
+    const deco = ['highlight', 'background', 'border', 'sound', 'tag', 'color', 'colour', 'flash'].includes(lower);
     cls = deco ? 'k-deco' : 'k-cond';
   }
   let painted = rest || '';
@@ -2353,6 +2433,8 @@ function contextAt() {
   if (first === 'stat' && words.length === 2) return Object.assign({ kind: 'stat' }, tail(words[1]));
   if (first === 'type') return Object.assign({ kind: 'type' }, tail(words[words.length - 1]));
   if (first === 'highlight' && words.length === 2) return Object.assign({ kind: 'level' }, tail(words[1]));
+  if (first === 'background' && words.length === 2) return Object.assign({ kind: 'background' }, tail(words[1]));
+  if (first === 'border' && words.length === 2) return Object.assign({ kind: 'border' }, tail(words[1]));
   if (first === 'sound' && words.length === 2) return Object.assign({ kind: 'sound' }, tail(words[1]));
   return null;
 }
@@ -2391,6 +2473,8 @@ function candidates(context) {
   if (context.kind === 'keyword') return KEYWORDS.filter(([w]) => hit(w)).map(([w, h]) => ({ text: w, help: h }));
   if (context.kind === 'cond') return CONDITIONS.filter(([w]) => hit(w)).map(([w, h]) => ({ text: w, help: h }));
   if (context.kind === 'level') return LEVELS.filter(([w]) => hit(w)).map(([w, h]) => ({ text: w, help: h }));
+  if (context.kind === 'background') return BACKGROUNDS.filter(([w]) => hit(w)).map(([w, h]) => ({ text: w, help: h }));
+  if (context.kind === 'border') return BORDERS.filter(([w]) => hit(w)).map(([w, h]) => ({ text: w, help: h }));
   if (context.kind === 'sound') {
     // Completing from the folder, so a name that completes is a name that will actually play.
     // Offering a built-in the player deleted would autocomplete a rule into silence.
@@ -3145,8 +3229,9 @@ $('problems').addEventListener('click', (event) => {
 });
 
 $('cascade').addEventListener('click', (event) => {
-  const hit = event.target.closest('[data-open],[data-pick],[data-color],[data-level],[data-sound],[data-verb],'
-    + '[data-del],[data-jump],[data-line],[data-up],[data-t],[data-audition],[data-show],[data-unpin],[data-unmute]');
+  const hit = event.target.closest('[data-open],[data-pick],[data-color],[data-level],[data-background],[data-border],'
+    + '[data-sound],[data-verb],[data-del],[data-jump],[data-line],[data-up],[data-t],[data-audition],'
+    + '[data-show],[data-unpin],[data-unmute]');
   if (!hit) return;
   const d = hit.dataset;
   if (d.audition !== undefined) return audition(d.audition);
@@ -3164,6 +3249,10 @@ $('cascade').addEventListener('click', (event) => {
     return setDeco(openRule, 'Color', d.color === fallback ? null : d.color);
   }
   if (d.level !== undefined) return setDeco(openRule, 'Highlight', d.level === 'dot' ? null : d.level);
+  if (d.background !== undefined) {
+    return setDeco(openRule, 'Background', d.background === 'border' ? null : d.background);
+  }
+  if (d.border !== undefined) return setDeco(openRule, 'Border', d.border === 'on' ? null : d.border);
   if (d.sound !== undefined) return setDeco(openRule, 'Sound', d.sound || null);
   if (d.verb !== undefined) {
     const block = plan.blocks[Number(d.verb)];

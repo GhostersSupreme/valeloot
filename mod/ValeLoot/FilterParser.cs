@@ -363,6 +363,8 @@ internal static class FilterParser
         string color = block.Hide ? "#6b7a73" : "#4ade80";
         string label = "";
         int level = 0;
+        int background = LootFilter.BackgroundBorder;
+        bool border = true;
         string? sound = null;
         bool statModeExplicit = false;
         int? statMatchesLine = null;
@@ -620,6 +622,27 @@ internal static class FilterParser
                     break;
                 }
 
+                case "background":
+                {
+                    int wanted = LootFilter.ParseBackground(remainder.ToLowerInvariant());
+                    if (wanted < 0)
+                    {
+                        errors.Add(new FilterError(line, text, "Background needs one of: border, fill, holo"));
+                        break;
+                    }
+                    background = wanted;
+                    break;
+                }
+
+                case "border":
+                {
+                    string wanted = remainder.ToLowerInvariant();
+                    if (wanted == "on") border = true;
+                    else if (wanted == "off") border = false;
+                    else errors.Add(new FilterError(line, text, "Border needs one of: on, off"));
+                    break;
+                }
+
                 // How `Highlight glow` was spelled before there were levels. Kept so a filter copied from
                 // an older overlay install keeps parsing.
                 case "flash": level = LootFilter.LevelGlow; break;
@@ -694,12 +717,13 @@ internal static class FilterParser
                 "a Hide block with no conditions silences EVERYTHING — name it \"everything\" if you truly mean it"));
         }
 
-        // Decoration a Hide block cannot honour. Silently accepting it means an author who asked for a
-        // glow gets darkness and no explanation, which is the hardest kind of filter bug to see.
-        if (block.Hide && (sound is not null || level != 0))
+        // Decoration a Hide block cannot honour. Silently accepting it means an author who asked for
+        // a visible treatment gets darkness and no explanation, which is the hardest filter bug to see.
+        if (block.Hide && (sound is not null || level != 0
+            || background != LootFilter.BackgroundBorder || !border))
         {
             errors.Add(new FilterError(block.StartLine, $"Hide \"{block.Name}\"",
-                "a Hide block draws nothing and plays nothing — remove its Highlight/Sound, or make it a Show block"));
+                "a Hide block draws nothing and plays nothing — remove its Highlight/Background/Border/Sound, or make it a Show block"));
         }
 
         (float r, float g, float b) = LootFilter.ParseColor(color);
@@ -712,6 +736,8 @@ internal static class FilterParser
             B = b,
             Label = label,
             Level = level == 0 ? LootFilter.LevelDot : level,
+            Background = background,
+            Border = border,
             Sound = sound,
             Mute = block.Hide,
             When = when,

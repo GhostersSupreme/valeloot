@@ -180,152 +180,370 @@ internal static class FilterFile
     /**
      * The file a fresh install gets.
      *
-     * It is a working filter, not a blank page with instructions: the first thing a new player should
-     * see is their own bag reacting, which proves the hooks landed before they have written anything.
-     * The rules are deliberately broad and gentle — a favourite marker and a refine marker, both of
-     * which any established account will already have items for.
+     * It is a complete general-purpose filter, not a blank page with instructions: a fresh install
+     * immediately demonstrates every display tier against the player's real bag. Twenty-eight ordered
+     * rules preserve focused ATK/MAGIC/DEF/MDEF classification without shipping the former 94-rule
+     * wall of near-duplicates.
      */
-    private const string DefaultFilter = @"# ValeLoot — your rules, your colours.
+    private const string DefaultFilter = @"# =====================================================================
+# VALELOOT — CATEGORY GENERAL DEFAULT
 #
-# Save this file and your bag recolours the next time the inventory redraws. No restart, no relog.
-# Rules are tried top to bottom and the FIRST match wins, so an item takes the colour of the topmost
-# rule that claims it. Specific rules belong at the top, broad ones at the bottom. That ordering is
-# the whole trick: you never have to think about overlap, only about priority.
+# A focused 28-rule cut of the former 94-rule consolidated filter.
+# FIRST MATCH WINS. Keep the tier bands and GENERAL fallbacks in order.
 #
-# Press F8 in game for the editor, which shows your real bag and what these rules do to it.
-# Every item and stat name the game knows is listed in valeloot-items.txt, next to this file, so
-# you never have to guess a spelling.
-#
-# Conditions              what it asks
-#   Name       Kunai      part of the item's name or its id; comma-separated means any of them,
-#                         so Name ""Buzzing Hive Fragment"", ""Abyssal Idol"" is one rule for both
-#   Type       Dagger     the item's type; comma-separated means any of them.
-#                         Artifact, Card, Gem, Consumable and Junk claim whole kinds at once
-#   TopRolls   >= 2       how many lines print their legal maximum value
-#   HighRolls  >= 2       how many hidden raw rolls reach Threshold, below
-#   AvgRollPct < 35       average hidden roll quality, in percent (legacy AvgRoll still works)
-#   Stat       Agi >= 90% that stat's line rolled in the top tenth of its range
-#   Stat       Agi >= 3   that stat PRINTS at least 3 on this item
-#   StatMatches >= 3      at least three of the listed Stat conditions must match
-#   OverRoll              a line above its normal maximum — only a Chaos widen does that
-#   Refine     >= 5       refine level at least this
-#   Favorite              the star you put on it in game
-#   Chaos / NoChaos       has a chaos type, or has not
-#   AnyStat               one Stat line is enough (default: every Stat line must match)
-#   AnyOf                one of its more-indented Stat lines must match; every group is required
-# Friendly aliases such as AttackSpeed (AtkSpd), Multistrike (DoubleAttack), and
-# MovementSpeed (MoveSpd) also work. valeloot-items.txt lists every friendly/internal pair.
-#
-# Example: AGI plus either Atk% (AtkMult) or flat Atk
-#   Stat       Agi >= 1
-#   AnyOf
-#       Stat   AtkMult >= 1
-#       Stat   Atk >= 1
-#
-# Decorations (Show blocks only)
-#   Color      #4ade80    the cell's colour, and the colour of the hover note
-#   Tag        KEEP       a short word, shown in the hover note
-#   Highlight  dot | mark | glow      how loud: barely lit, clearly lit, unmistakable
-#   Sound      chime      played once when a matching item is picked up
-#                         (built in: blip, chime, ding, alert, thud — or drop a .wav in
-#                          valeloot-sounds/ and name it here)
-
+# Display language:
+#   4+ top  rotating holo background, no frame, glow + alert
+#   3 top   flat full-card background, no frame, glow + chime
+#   2 top   flat full-card background, no frame, mark
+#   1 top   coloured frame only, quiet dot
+# =====================================================================
 
 Threshold 90
 
-
-# ── BY NAME, one item at a time ──────────────────────────────────────────────────
-# These ignore rule order completely: for the drop you refuse to lose track of, and the one
-# item you are sick of seeing lit up. Uncomment and put your own names in.
-#
-# AlwaysShow ""Spirit Ward"", ""Windborne Rune""
-# AlwaysHide ""Rusty Dagger""
-
-
-# ── BY DISPLAYED TOP VALUES ───────────────────────────────────────────────────────
-# TopRolls counts lines whose printed value reaches that stat's legal maximum. Low-cap stats can
-# print their maximum below a 90% hidden roll; that still counts, because it is what the tooltip says.
-
-Show ""Two displayed top rolls""
-    TopRolls  >= 2
-    Color     #e9c46a
-    Tag       TOP2
-    Highlight glow
-    Sound     chime
-
-
-# ── BY TYPE + STAT — the class-specific rule ─────────────────────────────────────
-# Narrow to the weapons you actually use, then demand something of them. Most of your real
-# rules will end up this shape. Change the types and the stat to suit your character.
-
-Show ""Weapons worth keeping""
-    Type      Dagger, Katar, Twinblade
-    Stat      Agi >= 3
-    Color     #c4a5ff
-    Tag       MINE
-    Highlight glow
-
-
-# ── BY A STAT'S ROLL QUALITY (with %) ────────────────────────────────────────────
-# ""Agi landed in the top tenth of its range on THIS item"", whatever it prints. Works on
-# artifacts too, because a roll percentage needs nothing but the item itself.
-
-Show ""Top-rolled Agi""
-    Stat      Agi >= 90%
-    Color     #4ade80
-    Tag       AGI%
-    Highlight mark
-
-
-# ── BY A STAT'S PRINTED VALUE (no %) ─────────────────────────────────────────────
-# The number the game prints on the line — a different question from the block above.
-# Attributes cap at 3, so >= 3 means maxed; Crit and AtkSpd run much higher, which is why
-# their thresholds are not 3.
-
-Show ""High crit""
-    Stat      Crit >= 8
-    Color     #f472b6
-    Tag       CRIT
-    Highlight mark
-
-
-# ── BY REFINE — work you have already paid for ───────────────────────────────────
-
-Show ""Well refined""
-    Refine    >= 5
-    Color     #ff9f6b
-    Tag       ""+5""
-    Highlight mark
-
-
-# ── BY THE GAME'S OWN FLAG ───────────────────────────────────────────────────────
-# Whatever you starred in game. The cheapest signal there is: you already maintain it.
+# Exceptional items beat every category.
+Show ""Chaos over-roll""
+    OverRoll
+    Tag        OVER
+    Color      #ffd166
+    Highlight  glow
+    Background holo
+    Border     off
+    Sound      alert
 
 Show ""Favourites""
     Favorite
-    Color     #facc15
-    Tag       FAV
-    Highlight dot
+    Tag        FAV
+    Color      #facc15
+    Highlight  glow
+    Background fill
+    Border     off
 
+# Artifacts require a top +3 primary attribute, then split by total top rolls.
+Show ""Artifact — perfect""
+    Type        Artifact
+    TopRolls   >= 3
+    AnyOf
+        Stat    Str >= 3
+        Stat    Vit >= 3
+        Stat    Dex >= 3
+        Stat    Agi >= 3
+        Stat    Int >= 3
+        Stat    Luk >= 3
+    Tag         ART-P
+    Color       #f4d35e
+    Highlight   glow
+    Background  holo
+    Border      off
+    Sound       alert
 
-# ── BY CHAOS — a line above its normal maximum ───────────────────────────────────
-# Only a Chaos widen can push a roll past 100%, so it is always worth a look. This reads 0
-# until one drops, and that is fine — it is a trap set, not a rule that failed.
+Show ""Artifact — semi""
+    Type        Artifact
+    TopRolls   >= 2
+    AnyOf
+        Stat    Str >= 3
+        Stat    Vit >= 3
+        Stat    Dex >= 3
+        Stat    Agi >= 3
+        Stat    Int >= 3
+        Stat    Luk >= 3
+    Tag         ART-S
+    Color       #d9a441
+    Highlight   mark
+    Background  fill
+    Border      off
 
-Show ""Chaos paid off""
-    OverRoll
-    Color     #ef6f6f
-    Tag       CHAOS
-    Highlight glow
-    Sound     alert
+Hide ""Artifact trash""
+    Type        Artifact
 
+# A required physical group plus a required magic group replaces dozens of pair rules.
+Hide ""Mixed physical + magic""
+    AnyOf
+        Stat    AtkMult >= 2
+        Stat    DamageMelee >= 5
+        Stat    Atk >= 3
+        Stat    Crit >= 5
+        Stat    Hit >= 10
+        Stat    CritDamage >= 10
+        Stat    Chain >= 1
+        Stat    DoubleAttack >= 20
+        Stat    DamageRanged >= 5
+        Stat    Range >= 1
+    AnyOf
+        Stat    DamageMagic >= 5
+        Stat    MatkMult >= 2
+        Stat    CastSpd >= 10
+        Stat    Matk >= 3
+        Stat    Healing >= 10
+        Stat    CastRange >= 1
 
-# ── AND THE REST ─────────────────────────────────────────────────────────────────
-# A Hide block claims items and then draws nothing — that is its whole job. Anything no rule
-# claims at all is simply left alone, which will be most of your bag, and should be.
+# 4+ TOP — rotating, borderless, unmistakable.
+Show ""ATK — 4+ top""
+    Stat        AtkMult >= 2
+    Stat        DamageMelee >= 5
+    Stat        Atk >= 3
+    Stat        Crit >= 5
+    Stat        Hit >= 10
+    Stat        CritDamage >= 10
+    Stat        Chain >= 1
+    Stat        DoubleAttack >= 20
+    Stat        DamageRanged >= 5
+    Stat        Range >= 1
+    StatMatches >= 2
+    TopRolls   >= 4
+    Tag         ATK-4
+    Color       #ff5a5f
+    Highlight   glow
+    Background  holo
+    Border      off
+    Sound       alert
 
-Hide ""vendor trash""
-    AvgRollPct < 35
-    HighRolls  < 1
+Show ""MAGIC — 4+ top""
+    Stat        DamageMagic >= 5
+    Stat        MatkMult >= 2
+    Stat        CastSpd >= 10
+    Stat        Matk >= 3
+    Stat        Healing >= 10
+    Stat        CastRange >= 1
+    StatMatches >= 2
+    TopRolls   >= 4
+    Tag         MAG-4
+    Color       #2fb8ff
+    Highlight   glow
+    Background  holo
+    Border      off
+    Sound       alert
+
+Show ""DEF — 4+ top""
+    Stat        Def >= 5
+    Stat        DefMult >= 5
+    Stat        Flee >= 15
+    StatMatches >= 2
+    TopRolls   >= 4
+    Tag         DEF-4
+    Color       #52d273
+    Highlight   glow
+    Background  holo
+    Border      off
+    Sound       alert
+
+Show ""MDEF — 4+ top""
+    Stat        Mdef >= 5
+    Stat        MdefMult >= 5
+    StatMatches >= 2
+    TopRolls   >= 4
+    Tag         MDF-4
+    Color       #a86cff
+    Highlight   glow
+    Background  holo
+    Border      off
+    Sound       alert
+
+Show ""GENERAL — 4+ top""
+    TopRolls   >= 4
+    Tag         GEN-4
+    Color       #e6efe9
+    Highlight   glow
+    Background  holo
+    Border      off
+    Sound       alert
+
+# 3 TOP — flat full-card colour, no frame.
+Show ""ATK — 3 top""
+    Stat        AtkMult >= 2
+    Stat        DamageMelee >= 5
+    Stat        Atk >= 3
+    Stat        Crit >= 5
+    Stat        Hit >= 10
+    Stat        CritDamage >= 10
+    Stat        Chain >= 1
+    Stat        DoubleAttack >= 20
+    Stat        DamageRanged >= 5
+    Stat        Range >= 1
+    StatMatches >= 2
+    TopRolls   >= 3
+    Tag         ATK-3
+    Color       #ff5a5f
+    Highlight   glow
+    Background  fill
+    Border      off
+    Sound       chime
+
+Show ""MAGIC — 3 top""
+    Stat        DamageMagic >= 5
+    Stat        MatkMult >= 2
+    Stat        CastSpd >= 10
+    Stat        Matk >= 3
+    Stat        Healing >= 10
+    Stat        CastRange >= 1
+    StatMatches >= 2
+    TopRolls   >= 3
+    Tag         MAG-3
+    Color       #2fb8ff
+    Highlight   glow
+    Background  fill
+    Border      off
+    Sound       chime
+
+Show ""DEF — 3 top""
+    Stat        Def >= 5
+    Stat        DefMult >= 5
+    Stat        Flee >= 15
+    StatMatches >= 2
+    TopRolls   >= 3
+    Tag         DEF-3
+    Color       #52d273
+    Highlight   glow
+    Background  fill
+    Border      off
+    Sound       chime
+
+Show ""MDEF — 3 top""
+    Stat        Mdef >= 5
+    Stat        MdefMult >= 5
+    StatMatches >= 2
+    TopRolls   >= 3
+    Tag         MDF-3
+    Color       #a86cff
+    Highlight   glow
+    Background  fill
+    Border      off
+    Sound       chime
+
+Show ""GENERAL — 3 top""
+    TopRolls   >= 3
+    Tag         GEN-3
+    Color       #c7d0dc
+    Highlight   glow
+    Background  fill
+    Border      off
+    Sound       chime
+
+# 2 TOP — flat full-card colour, quieter mark.
+Show ""ATK — 2 top""
+    Stat        AtkMult >= 2
+    Stat        DamageMelee >= 5
+    Stat        Atk >= 3
+    Stat        Crit >= 5
+    Stat        Hit >= 10
+    Stat        CritDamage >= 10
+    Stat        Chain >= 1
+    Stat        DoubleAttack >= 20
+    Stat        DamageRanged >= 5
+    Stat        Range >= 1
+    StatMatches >= 2
+    TopRolls   >= 2
+    Tag         ATK-2
+    Color       #ff5a5f
+    Highlight   mark
+    Background  fill
+    Border      off
+
+Show ""MAGIC — 2 top""
+    Stat        DamageMagic >= 5
+    Stat        MatkMult >= 2
+    Stat        CastSpd >= 10
+    Stat        Matk >= 3
+    Stat        Healing >= 10
+    Stat        CastRange >= 1
+    StatMatches >= 2
+    TopRolls   >= 2
+    Tag         MAG-2
+    Color       #2fb8ff
+    Highlight   mark
+    Background  fill
+    Border      off
+
+Show ""DEF — 2 top""
+    Stat        Def >= 5
+    Stat        DefMult >= 5
+    Stat        Flee >= 15
+    StatMatches >= 2
+    TopRolls   >= 2
+    Tag         DEF-2
+    Color       #52d273
+    Highlight   mark
+    Background  fill
+    Border      off
+
+Show ""MDEF — 2 top""
+    Stat        Mdef >= 5
+    Stat        MdefMult >= 5
+    StatMatches >= 2
+    TopRolls   >= 2
+    Tag         MDF-2
+    Color       #a86cff
+    Highlight   mark
+    Background  fill
+    Border      off
+
+Show ""GENERAL — 2 top""
+    TopRolls   >= 2
+    Tag         GEN-2
+    Color       #9aa8a0
+    Highlight   mark
+    Background  fill
+    Border      off
+
+# 1 TOP — quiet frame-only potential. Category rules precede GENERAL.
+Show ""ATK — 1 top""
+    Stat        AtkMult >= 2
+    Stat        DamageMelee >= 5
+    Stat        Atk >= 3
+    Stat        Crit >= 5
+    Stat        Hit >= 10
+    Stat        CritDamage >= 10
+    Stat        Chain >= 1
+    Stat        DoubleAttack >= 20
+    Stat        DamageRanged >= 5
+    Stat        Range >= 1
+    StatMatches >= 1
+    TopRolls   >= 1
+    Tag         ATK-1
+    Color       #ff5a5f
+
+Show ""MAGIC — 1 top""
+    Stat        DamageMagic >= 5
+    Stat        MatkMult >= 2
+    Stat        CastSpd >= 10
+    Stat        Matk >= 3
+    Stat        Healing >= 10
+    Stat        CastRange >= 1
+    StatMatches >= 1
+    TopRolls   >= 1
+    Tag         MAG-1
+    Color       #2fb8ff
+
+Show ""DEF — 1 top""
+    Stat        Def >= 5
+    Stat        DefMult >= 5
+    Stat        Flee >= 15
+    StatMatches >= 1
+    TopRolls   >= 1
+    Tag         DEF-1
+    Color       #52d273
+
+Show ""MDEF — 1 top""
+    Stat        Mdef >= 5
+    Stat        MdefMult >= 5
+    StatMatches >= 1
+    TopRolls   >= 1
+    Tag         MDF-1
+    Color       #a86cff
+
+Show ""GENERAL — 1 top""
+    TopRolls   >= 1
+    Tag         GEN-1
+    Color       #7f8b85
+
+# Work already invested remains visible even when no line is top-rolled.
+Show ""Refined work""
+    Refine     >= 5
+    Tag         +5
+    Color       #ff9f6b
+    Highlight   mark
+    Background  fill
+    Border      off
+
+Hide ""everything""
 ";
 }

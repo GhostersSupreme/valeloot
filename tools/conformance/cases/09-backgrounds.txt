@@ -1,0 +1,30 @@
+# Default border, solid fill, and rotating hue must parse identically in both engines.
+Show "default border"
+    Favorite
+    Color      #7CC0FF
+
+Show "solid background"
+    TopRolls   >= 2
+    Color      #E9C46A
+    Background fill
+    Border     off
+
+Show "rotating background"
+    OverRoll
+    Color      #A78BFA
+    Background holo
+    Highlight  glow
+
+# Invalid modes and visible decorations on Hide are rejected on the same source lines.
+Show "bad background"
+    Refine     >= 3
+    Background shimmer
+
+Show "bad border"
+    Type       Card
+    Border     maybe
+
+Hide "cannot paint"
+    HighRolls  < 1
+    Background fill
+    Border     off

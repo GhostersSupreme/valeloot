@@ -327,6 +327,9 @@ internal static class Program
         Str(json, rule.Label);
         json.Append(", \"level\": ");
         Str(json, LootFilter.LevelName(rule.Level));
+        json.Append(", \"background\": ");
+        Str(json, LootFilter.BackgroundName(rule.Background));
+        json.Append(", \"border\": ").Append(rule.Border ? "true" : "false");
         json.Append(", \"sound\": ");
         if (rule.Sound is null) json.Append("null"); else Str(json, rule.Sound);
         json.Append(", \"mute\": ").Append(rule.Mute ? "true" : "false");
