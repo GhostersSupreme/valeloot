@@ -45,6 +45,31 @@
  */
 
 import type { OwnedGear, Verdict } from './types.ts';
+/**
+ * Collision-free player-facing names for live SpiritVale stats.
+ *
+ * The internal enum names remain canonical and valid. This table exists at comparison and
+ * autocomplete boundaries only; labels that collide with another live internal name are deliberately
+ * absent.
+ */
+export const STAT_ALIASES = [
+  { friendly: 'AttackSpeed', internal: 'AtkSpd' },
+  { friendly: 'AttackSpeedLimit', internal: 'AtkSpdLimit' },
+  { friendly: 'CastSpeed', internal: 'CastSpd' },
+  { friendly: 'AutoAttackChain', internal: 'Chain' },
+  { friendly: 'MagicDamage', internal: 'DamageMagic' },
+  { friendly: 'MeleeDamage', internal: 'DamageMelee' },
+  { friendly: 'RangedDamage', internal: 'DamageRanged' },
+  { friendly: 'Multistrike', internal: 'DoubleAttack' },
+  { friendly: 'HealthLeech', internal: 'Leech' },
+  { friendly: 'MovementSpeed', internal: 'MoveSpd' },
+] as const;
+
+export function canonicalStatName(input: string): string {
+  const match = STAT_ALIASES.find((entry) => entry.friendly.toLowerCase() === input.toLowerCase());
+  return match?.internal ?? input;
+}
+
 
 export interface StatCondition {
   stat: string;
@@ -281,7 +306,7 @@ export function matchLoot(item: OwnedGear, rules: readonly LootRule[], context: 
 }
 
 function matchesStat(item: OwnedGear, condition: StatCondition): boolean {
-  const wanted = condition.stat.toLowerCase();
+  const wanted = canonicalStatName(condition.stat).toLowerCase();
   const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === wanted);
   return Boolean(line)
     && (condition.minRollPct === undefined
@@ -475,7 +500,7 @@ function normalizeCondition(input: unknown): LootCondition {
         const min = Number(entry.minRollPct);
         const value = Number(entry.minValue);
         return {
-          stat: entry.stat,
+          stat: canonicalStatName(entry.stat),
           ...(Number.isFinite(min) ? { minRollPct: Math.max(0, Math.min(100, min)) } : {}),
           ...(Number.isFinite(value) ? { minValue: value } : {}),
         };
@@ -490,7 +515,7 @@ function normalizeCondition(input: unknown): LootCondition {
           const min = Number(entry.minRollPct);
           const value = Number(entry.minValue);
           return {
-            stat: entry.stat,
+            stat: canonicalStatName(entry.stat),
             ...(Number.isFinite(min) ? { minRollPct: Math.max(0, Math.min(100, min)) } : {}),
             ...(Number.isFinite(value) ? { minValue: value } : {}),
           };

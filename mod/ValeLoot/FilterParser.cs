@@ -68,6 +68,52 @@ namespace ValeLoot;
 /// rather than misread. A block with any bad line is therefore REJECTED WHOLE and reported with its
 /// line number, and this parser never emits a partially-understood rule.
 /// </summary>
+/// <summary>
+/// Player-facing stat spellings accepted in addition to the live <c>StatType</c> names.
+///
+/// Internal names stay canonical. Every consumer calls <see cref="Canonical"/> at its boundary, so
+/// the evaluator, generated reference, and editor can share the friendly vocabulary without changing
+/// the names read from the game.
+/// </summary>
+internal static class StatAliases
+{
+    internal readonly struct Entry
+    {
+        public readonly string Friendly;
+        public readonly string Internal;
+
+        public Entry(string friendly, string internalName)
+        {
+            Friendly = friendly;
+            Internal = internalName;
+        }
+    }
+
+    internal static readonly Entry[] All =
+    {
+        new("AttackSpeed", "AtkSpd"),
+        new("AttackSpeedLimit", "AtkSpdLimit"),
+        new("CastSpeed", "CastSpd"),
+        new("AutoAttackChain", "Chain"),
+        new("MagicDamage", "DamageMagic"),
+        new("MeleeDamage", "DamageMelee"),
+        new("RangedDamage", "DamageRanged"),
+        new("Multistrike", "DoubleAttack"),
+        new("HealthLeech", "Leech"),
+        new("MovementSpeed", "MoveSpd"),
+    };
+
+    internal static string Canonical(string name)
+    {
+        for (int i = 0; i < All.Length; i++)
+        {
+            if (string.Equals(name, All[i].Friendly, StringComparison.OrdinalIgnoreCase))
+                return All[i].Internal;
+        }
+        return name;
+    }
+}
+
 internal static class FilterParser
 {
     internal readonly struct FilterError
@@ -303,7 +349,7 @@ internal static class FilterParser
 
         double value = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
         int minimum = op == ">" ? (int)Math.Floor(value) + 1 : (int)Math.Ceiling(value);
-        var condition = new LootFilter.StatCondition { Stat = match.Groups[1].Value };
+        var condition = new LootFilter.StatCondition { Stat = StatAliases.Canonical(match.Groups[1].Value) };
         if (match.Groups[4].Value.Length > 0) condition.MinRollPct = minimum;
         else condition.MinValue = minimum;
         return condition;

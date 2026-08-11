@@ -458,9 +458,10 @@ internal static class LootFilter
 
     private static bool MatchesStat(ItemFacts item, StatCondition want)
     {
+        string wantedName = StatAliases.Canonical(want.Stat);
         for (int i = 0; i < item.StatCount; i++)
         {
-            if (!string.Equals(item.StatNames[i], want.Stat, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(item.StatNames[i], wantedName, StringComparison.OrdinalIgnoreCase)) continue;
             if (want.MinRollPct is int minRoll && item.StatRolls[i] < minRoll) continue;
             if (want.MinValue is int minValue)
             {

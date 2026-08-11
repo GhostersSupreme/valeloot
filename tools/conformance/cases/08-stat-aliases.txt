@@ -1,0 +1,28 @@
+# Friendly aliases canonicalize to the live internal StatType names in both parsers.
+Show "all friendly aliases"
+    Stat      AttackSpeed >= 70%
+    Stat      AttackSpeedLimit >= 70%
+    Stat      CastSpeed >= 70%
+    Stat      AutoAttackChain >= 70%
+    Stat      MagicDamage >= 70%
+    Stat      MeleeDamage >= 70%
+    Stat      RangedDamage >= 70%
+    Stat      Multistrike >= 70%
+    Stat      HealthLeech >= 70%
+    Stat      MovementSpeed >= 70%
+    AnyStat
+    Color     #4ade80
+
+# These shorter names already belong to distinct live stats. They must remain themselves rather than
+# becoming aliases for the corresponding *Mult stat.
+Show "collision exclusions"
+    Stat      Atk >= 1
+    Stat      Matk >= 1
+    Stat      Def >= 1
+    Stat      Mdef >= 1
+    Stat      Hp >= 1
+    Stat      Mp >= 1
+    Stat      HpRegen >= 1
+    Stat      MpRegen >= 1
+    AnyStat
+    Color     #e9c46a

@@ -44,7 +44,7 @@ const steps: readonly Step[] = [
   },
   {
     name: 'filter behavior',
-    argv: ['bun', 'test', 'tools/conformance/statmatches.test.ts', 'tools/conformance/roll-semantics.test.ts'],
+    argv: ['bun', 'test', 'tools/conformance/statmatches.test.ts', 'tools/conformance/roll-semantics.test.ts', 'tools/conformance/stat-aliases.test.ts'],
     meaning: 'a filter parser or evaluator contract is broken',
   },
   {

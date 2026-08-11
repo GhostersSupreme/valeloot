@@ -406,6 +406,11 @@ h3.sec{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(
 .k-num{color:var(--warn)}
 .k-str{color:#e8c89a}
 .k-com{color:var(--faint);font-style:italic}
+.k-color{color:var(--ink);font-weight:600}
+.color-preview{display:inline-block;position:relative;width:0;height:0}
+.color-preview::after{content:"";position:absolute;left:.55em;top:-.78em;width:.72em;height:.72em;
+  border-radius:2px;background:var(--preview);border:1px solid rgba(255,255,255,.32);
+  box-shadow:0 0 0 1px rgba(0,0,0,.72)}
 /* The `%` teaching line: it lives under the caret, not in a help panel. */
 #coach{flex:none;border-top:1px solid var(--line);background:var(--sunk);padding:7px 12px;font-size:11.5px;
   color:var(--dim);line-height:1.6;display:none}
@@ -553,6 +558,22 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
 <script>
 (function(){
 // src/filter/loot-filter.ts
+var STAT_ALIASES = [
+  { friendly: "AttackSpeed", internal: "AtkSpd" },
+  { friendly: "AttackSpeedLimit", internal: "AtkSpdLimit" },
+  { friendly: "CastSpeed", internal: "CastSpd" },
+  { friendly: "AutoAttackChain", internal: "Chain" },
+  { friendly: "MagicDamage", internal: "DamageMagic" },
+  { friendly: "MeleeDamage", internal: "DamageMelee" },
+  { friendly: "RangedDamage", internal: "DamageRanged" },
+  { friendly: "Multistrike", internal: "DoubleAttack" },
+  { friendly: "HealthLeech", internal: "Leech" },
+  { friendly: "MovementSpeed", internal: "MoveSpd" }
+];
+function canonicalStatName(input) {
+  const match = STAT_ALIASES.find((entry) => entry.friendly.toLowerCase() === input.toLowerCase());
+  return match?.internal ?? input;
+}
 var LOOT_HIGHLIGHTS = ["dot", "mark", "glow"];
 var BUILTIN_LOOT_SOUNDS = ["blip", "chime", "ding", "alert", "thud"];
 function normalizeSoundName(input) {
@@ -580,7 +601,7 @@ function matchLoot(item, rules, context) {
   return null;
 }
 function matchesStat(item, condition) {
-  const wanted = condition.stat.toLowerCase();
+  const wanted = canonicalStatName(condition.stat).toLowerCase();
   const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === wanted);
   return Boolean(line) && (condition.minRollPct === undefined || line.rollPct !== null && line.rollPct >= condition.minRollPct) && (condition.minValue === undefined || line.base >= condition.minValue);
 }
@@ -821,7 +842,7 @@ function parseRuleBlock(block, index) {
     }
     const raw = Number(rawValue);
     const value = op === ">" ? Math.floor(raw) + 1 : Math.ceil(raw);
-    return percent ? { stat, minRollPct: value } : { stat, minValue: value };
+    return percent ? { stat: canonicalStatName(stat), minRollPct: value } : { stat: canonicalStatName(stat), minValue: value };
   };
   const bound = (text, line, remainder, integral, apply) => {
     const match = /^([<>]=?|=)\s*(-?\d+(?:\.\d+)?)$/.exec(remainder);
@@ -1222,7 +1243,8 @@ globalThis.VL = {
   matchesCondition,
   normalizeSoundName,
   LOOT_HIGHLIGHTS,
-  BUILTIN_LOOT_SOUNDS
+  BUILTIN_LOOT_SOUNDS,
+  STAT_ALIASES
 };
 
 })();
@@ -1597,7 +1619,7 @@ function parseItems(text) {
       continue;
     }
     if (!line.trim() || line.trimStart().startsWith('#')) continue;
-    if (section === 'Stats') { stats.push(line.trim()); continue; }
+    if (section === 'Stats') { stats.push(line.trim().split(/\s+/)[0]); continue; }
     if (section === null) continue;
     const row = line.replace(/^\s+/, '');
     if (/^Lv\s+Name/.test(row)) continue;
@@ -2204,12 +2226,25 @@ function highlightLine(line) {
     const deco = ['highlight', 'sound', 'tag', 'color', 'colour', 'flash'].includes(lower);
     cls = deco ? 'k-deco' : 'k-cond';
   }
-  const painted = (rest || '')
+  let painted = rest || '';
+  let colorValue = null;
+  if (indent && (lower === 'color' || lower === 'colour')) {
+    painted = painted.replace(/#[0-9a-fA-F]{6}\b/, (match) => {
+      colorValue = match;
+      return '\u0005';
+    });
+  }
+  painted = painted
     .replace(/"[^"]*"/g, (m) => '\u0001' + m + '\u0002')
     .replace(/-?\d+(\.\d+)?%?/g, (m) => '\u0003' + m + '\u0004');
-  const body = esc(painted)
+  let body = esc(painted)
     .replace(/\u0001([^\u0002]*)\u0002/g, '<span class="k-str">$1</span>')
     .replace(/\u0003([^\u0004]*)\u0004/g, '<span class="k-num">$1</span>');
+  if (colorValue) {
+    const chip = '<span class="k-color">' + colorValue + '</span>'
+      + '<span class="color-preview" style="--preview:' + colorValue + '"></span>';
+    body = body.replace('\u0005', chip);
+  }
   return esc(indent) + (cls ? '<span class="' + cls + '">' + esc(word) + '</span>' : esc(word)) + body + tail;
 }
 
@@ -2326,6 +2361,30 @@ function itemContext(line, lineStart) {
   return { kind: 'item', token: after.replace(/^"/, ''), from: lineStart + line.length - after.length };
 }
 
+function statCandidates(hit) {
+  const aliases = Array.isArray(VL.STAT_ALIASES) ? VL.STAT_ALIASES : [];
+  const available = new Set(vocab.stats.map((stat) => stat.toLowerCase()));
+  const out = [];
+  const seen = new Set();
+
+  // Friendly spellings lead, but only for stats this game build actually exposes.
+  for (const alias of aliases) {
+    if (!available.has(alias.internal.toLowerCase()) && !available.has(alias.friendly.toLowerCase())) continue;
+    if (!hit(alias.friendly) && !hit(alias.internal)) continue;
+    out.push({ text: alias.friendly, help: 'friendly name', meta: 'internal: ' + alias.internal });
+    seen.add(alias.friendly.toLowerCase());
+  }
+
+  // Internal names remain discoverable and valid for every existing filter.
+  for (const stat of vocab.stats) {
+    if (seen.has(stat.toLowerCase()) || !hit(stat)) continue;
+    const alias = aliases.find((entry) => entry.internal.toLowerCase() === stat.toLowerCase());
+    out.push({ text: stat, meta: alias ? 'friendly: ' + alias.friendly : undefined });
+    seen.add(stat.toLowerCase());
+  }
+  return out.slice(0, 60);
+}
+
 function candidates(context) {
   const q = context.token.toLowerCase();
   const hit = (s) => s.toLowerCase().startsWith(q) || (q.length > 1 && s.toLowerCase().includes(q));
@@ -2340,7 +2399,7 @@ function candidates(context) {
       help: served.sounds ? 'in valeloot-sounds/ — click \u25b6 to hear it' : 'built in — click \u25b6 to hear it',
     }));
   }
-  if (context.kind === 'stat') return vocab.stats.filter(hit).slice(0, 60).map((s) => ({ text: s }));
+  if (context.kind === 'stat') return statCandidates(hit);
   if (context.kind === 'type') return vocab.types.filter(hit).slice(0, 60).map((t) => ({ text: t }));
   if (context.kind === 'item') {
     // The type travels with the name: two items called "… Fang Clip" are only distinguishable by it.

@@ -84,6 +84,7 @@ internal static class Program
         VerifyStatMatches();
         VerifyAnyOf();
         VerifyDisplayedStatRules();
+        VerifyStatAliases();
 
         string[] files = Directory.GetFiles(directory, "*.txt");
         Array.Sort(files, StringComparer.Ordinal);
@@ -120,6 +121,57 @@ internal static class Program
         AssertMatch(false, item, stats, null, 1, "at most one of three");
         AssertMatch(true, item, stats, 2, 2, "exactly two of three");
         AssertMatch(false, item, stats, 1, 1, "exactly one of three");
+    }
+
+    /// <summary>Friendly spellings canonicalize; collision exclusions stay distinct live stats.</summary>
+    private static void VerifyStatAliases()
+    {
+        foreach (StatAliases.Entry alias in StatAliases.All)
+        {
+            FilterParser.ParsedFilter parsed = FilterParser.Parse(
+                $"Show \"alias\"\n    Stat {alias.Friendly.ToLowerInvariant()} >= 70%");
+            if (parsed.Errors.Length != 0 || parsed.Rules.Length != 1)
+                throw new InvalidOperationException($"could not parse stat alias {alias.Friendly}");
+
+            LootFilter.StatCondition condition = parsed.Rules[0].When.Stats![0];
+            if (!string.Equals(condition.Stat, alias.Internal, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"stat alias {alias.Friendly} canonicalized to {condition.Stat}, expected {alias.Internal}");
+
+            var item = new LootFilter.ItemFacts();
+            item.AddStat(alias.Internal.ToUpperInvariant(), 0, 80, "");
+            AssertCondition(true, item, parsed.Rules[0].When,
+                            $"friendly alias {alias.Friendly} -> {alias.Internal}");
+        }
+
+        (string Source, string Collision)[] excluded =
+        {
+            ("AtkMult", "Atk"),
+            ("MatkMult", "Matk"),
+            ("DefMult", "Def"),
+            ("MdefMult", "Mdef"),
+            ("HpMult", "Hp"),
+            ("MpMult", "Mp"),
+            ("HpRegenMult", "HpRegen"),
+            ("MpRegenMult", "MpRegen"),
+        };
+        foreach ((string source, string collision) in excluded)
+        {
+            FilterParser.ParsedFilter parsed = FilterParser.Parse(
+                $"Show \"collision\"\n    Stat {collision.ToLowerInvariant()} >= 70%");
+            if (parsed.Errors.Length != 0 || parsed.Rules.Length != 1)
+                throw new InvalidOperationException($"could not parse collision exclusion {collision}");
+
+            var sourceItem = new LootFilter.ItemFacts();
+            sourceItem.AddStat(source, 0, 80, "");
+            AssertCondition(false, sourceItem, parsed.Rules[0].When,
+                            $"{collision} must not alias {source}");
+
+            var collisionItem = new LootFilter.ItemFacts();
+            collisionItem.AddStat(collision, 0, 80, "");
+            AssertCondition(true, collisionItem, parsed.Rules[0].When,
+                            $"{collision} remains its own internal stat");
+        }
     }
 
     /// <summary>Executable contract for required stats combined with grouped alternatives.</summary>

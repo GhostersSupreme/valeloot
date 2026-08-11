@@ -356,6 +356,18 @@ Conditions (all optional, and all must hold for the block to match):
     Chaos / NoChaos         has a chaos type, or has not
     Favorite / NotFavorite  the game's own favourite flag
 
+Stat also accepts these player-facing names; the internal names remain valid:
+
+    AttackSpeed       = AtkSpd          AttackSpeedLimit = AtkSpdLimit
+    CastSpeed         = CastSpd         AutoAttackChain   = Chain
+    MagicDamage       = DamageMagic     MeleeDamage       = DamageMelee
+    RangedDamage      = DamageRanged    Multistrike       = DoubleAttack
+    HealthLeech       = Leech           MovementSpeed     = MoveSpd
+
+Autocomplete prefers the friendly spelling and shows the internal name beside it.
+valeloot-items.txt lists both. Short labels such as Atk, Hp and Def are not aliases for AtkMult,
+HpMult or DefMult: those are separate live stats.
+
 Required AGI plus either Atk% or flat Atk:
 
     Stat Agi >= 1

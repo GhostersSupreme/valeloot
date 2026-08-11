@@ -81,7 +81,7 @@
  * `parseLootFilter` never emits a partially-understood rule.
  */
 import {
-  LOOT_HIGHLIGHTS, normalizeSoundName,
+  LOOT_HIGHLIGHTS, canonicalStatName, normalizeSoundName,
   type LootCondition, type LootHighlight, type LootRule, type StatCondition,
 } from './loot-filter.ts';
 import type { ItemOverrides, Verdict } from './types.ts';
@@ -283,7 +283,9 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
     }
     const raw = Number(rawValue);
     const value = op === '>' ? Math.floor(raw) + 1 : Math.ceil(raw);
-    return percent ? { stat: stat!, minRollPct: value } : { stat: stat!, minValue: value };
+    return percent
+      ? { stat: canonicalStatName(stat!), minRollPct: value }
+      : { stat: canonicalStatName(stat!), minValue: value };
   };
 
 

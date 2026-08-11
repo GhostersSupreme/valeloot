@@ -48,6 +48,7 @@ internal static class ItemCatalog
 
     /// <summary>How the reference file records what it was generated from, so a rewrite is cheap to decide.</summary>
     private const string CountMarker = "# items: ";
+    private const string FormatMarker = "# reference format: 2";
 
     /**
      * The type name each non-equip kind gets, since `EquipType` has nothing to say about them.
@@ -571,9 +572,9 @@ internal static class ItemCatalog
     /**
      * The generated reference file — the "easy to write" half of this feature.
      *
-     * Rewritten only when the equip count changes, which in practice means "after a content patch".
-     * A player may well have this file open in an editor; rewriting it on every launch to produce
-     * identical bytes would reload it under them for nothing.
+     * Rewritten when either the item count or reference format changes. A player may well have this
+     * file open in an editor; rewriting it on every launch to produce identical bytes would reload it
+     * under them for nothing.
      */
     private static void WriteReference()
     {
@@ -594,20 +595,27 @@ internal static class ItemCatalog
         }
     }
 
-    /// <summary>True when the file already on disk was generated from this many configs.</summary>
+    /// <summary>True when the file has the current format and was generated from this many configs.</summary>
     internal static bool ReferenceIsCurrent(string path, int count)
     {
         if (!File.Exists(path)) return false;
+        bool currentFormat = false;
+        bool currentCount = false;
         foreach (string line in File.ReadLines(path))
         {
-            // The marker sits in the header, so the scan stops at the first line that is not one.
-            if (line.Length > 0 && line[0] != '#') return false;
+            // Both markers sit in the header, so the scan stops at the first generated-data line.
+            if (line.Length > 0 && line[0] != '#') break;
+            if (string.Equals(line, FormatMarker, StringComparison.Ordinal))
+            {
+                currentFormat = true;
+                continue;
+            }
             if (!line.StartsWith(CountMarker, StringComparison.Ordinal)) continue;
-            return int.TryParse(line.Substring(CountMarker.Length).Trim(),
-                                NumberStyles.Integer, CultureInfo.InvariantCulture, out int had)
+            currentCount = int.TryParse(line.Substring(CountMarker.Length).Trim(),
+                                        NumberStyles.Integer, CultureInfo.InvariantCulture, out int had)
                 && had == count;
         }
-        return false;
+        return currentFormat && currentCount;
     }
 
     /// <summary>The whole reference file, as text. Pure: everything it reads is an argument.</summary>
@@ -648,6 +656,7 @@ internal static class ItemCatalog
             .Append("#     Stat Agi >= 3                  the printed value, from the Stats section below\n")
             .Append("#     Stat Agi >= 90%                how WELL that line rolled — a different question\n")
             .Append("#\n")
+            .Append(FormatMarker).Append('\n')
             .Append(CountMarker).Append(count.ToString(CultureInfo.InvariantCulture)).Append('\n')
             .Append("# generated: ").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)).Append('\n')
             .Append('\n');
@@ -675,11 +684,25 @@ internal static class ItemCatalog
                 .Append('\n');
         }
 
-        text.Append('\n')
-            .Append("\n== Stats ==\n")
-            .Append("# Names a `Stat` line accepts, read live from the game's StatType enum.\n");
         var stats = new List<string>(statNames);
         stats.Sort(StringComparer.OrdinalIgnoreCase);
+        text.Append('\n')
+            .Append("\n== Stats ==\n")
+            .Append("# Internal names read live from the game's StatType enum. Friendly aliases are listed\n")
+            .Append("# first as `friendly (internal: name)`; either spelling works in a Stat line.\n");
+        foreach (StatAliases.Entry alias in StatAliases.All)
+        {
+            bool live = false;
+            for (int i = 0; i < stats.Count; i++)
+            {
+                if (!string.Equals(stats[i], alias.Internal, StringComparison.OrdinalIgnoreCase)) continue;
+                live = true;
+                break;
+            }
+            if (!live) continue;
+            text.Append("  ").Append(alias.Friendly)
+                .Append(" (internal: ").Append(alias.Internal).Append(")\n");
+        }
         foreach (string stat in stats) text.Append("  ").Append(stat).Append('\n');
 
         return text.ToString();

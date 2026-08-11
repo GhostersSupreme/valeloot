@@ -213,6 +213,8 @@ internal static class FilterFile
 #   Chaos / NoChaos       has a chaos type, or has not
 #   AnyStat               one Stat line is enough (default: every Stat line must match)
 #   AnyOf                one of its more-indented Stat lines must match; every group is required
+# Friendly aliases such as AttackSpeed (AtkSpd), Multistrike (DoubleAttack), and
+# MovementSpeed (MoveSpd) also work. valeloot-items.txt lists every friendly/internal pair.
 #
 # Example: AGI plus either Atk% (AtkMult) or flat Atk
 #   Stat       Agi >= 1
