@@ -75,6 +75,7 @@ internal static class TooltipInject
     private static ActiveFn? _activeInHierarchy;
     private static IntPtr _textType;
     private static IntPtr _cellType;
+    private static IntPtr _refinableType;
     private static int _dataFieldOffset = -1;
     private static int _uidFieldOffset = -1;
     private static Action<string>? _log;
@@ -87,6 +88,7 @@ internal static class TooltipInject
      * — and because the last field of this kind that was not volatile cost a round of "the probe is broken".
      */
     private static volatile string? _pending;
+    private static volatile int _pendingMinChars = MinTooltipChars;
     /// <summary>Guards re-entry: appending calls `set_text`, which arrives straight back in the hook.</summary>
     private static bool _writing;
     private static SetTextFn? _setTextOriginal;
@@ -94,13 +96,14 @@ internal static class TooltipInject
     private static object? _setTextDetour;
 
     /**
-     * Shortest text worth treating as an item tooltip.
+     * Shortest text worth treating as the tooltip's description field.
      *
-     * Measured, not guessed: the probe read the real tooltip at 1288 chars and the next longest UI text
-     * (chat) at 189. A floor between them separates them without naming any object, which matters because
-     * nothing in that hierarchy is named after what it is.
+     * Equipment writes a ~1288-character body, so rule notes retain the measured 400-character guard.
+     * Simple materials have much shorter descriptions; an external provider is already latched to a
+     * confirmed item hover, and 60 excludes its title/type/weight fields while admitting that description.
      */
     private const int MinTooltipChars = 400;
+    private const int MinExternalTooltipChars = 60;
 
     public static bool Installed { get; private set; }
     /// <summary>Config switch: the note can be turned off without losing the cell colours.</summary>
@@ -163,6 +166,7 @@ internal static class TooltipInject
         _activeInHierarchy = Marshal.GetDelegateForFunctionPointer<ActiveFn>(active.NativePtr);
         _textType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(text));
         _cellType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(cell));
+        _refinableType = refinable;
         _dataFieldOffset = Il2CppMeta.FieldOffset(cell, "Data");
         // `UID` is an auto-property, so the FIELD is `<UID>k__BackingField` — asking for "UID" returns -1
         // and reads exactly like "the game renamed it". Declared on RefinableItemData, which both
@@ -191,7 +195,7 @@ internal static class TooltipInject
             _setTextOriginal = setOriginal;
 
             Installed = true;
-            log($"tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x{_dataFieldOffset:x}, UID 0x{_uidFieldOffset:x}, floor {MinTooltipChars} chars)");
+            log($"tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x{_dataFieldOffset:x}, UID 0x{_uidFieldOffset:x}, floors {MinTooltipChars}/{MinExternalTooltipChars} chars)");
         }
         catch (Exception e)
         {
@@ -240,26 +244,34 @@ internal static class TooltipInject
         if (cell == IntPtr.Zero) { Misses++; _pending = null; return; }
         IntPtr data = Marshal.ReadIntPtr(cell, _dataFieldOffset);
         if (data == IntPtr.Zero) { Misses++; _pending = null; return; }
-        string? uid = Il2CppMeta.ReadStringField(data, _uidFieldOffset);
-        if (uid is null || !InventoryPaint.TryGetMark(uid, out InventoryPaint.Mark mark) || mark.Level == 0)
-        {
-            Misses++;
-            _pending = null;
-            return;
-        }
 
-        /**
-         * TMP rich text in the rule's own colour, so the line reads the same as the cell it is
-         * explaining. The rule's own name IS the explanation — there is no second vocabulary to
-         * invent, because the player wrote the name.
-         *
-         * A rule with no `Tag` drops the bold prefix entirely rather than repeating its own name
-         * twice: `KEEP — rule "Kunai keepers"` is worth two clauses, `Kunai keepers — rule "Kunai
-         * keepers"` is not.
-         */
-        _pending = mark.Label.Length > 0
-            ? $"{Marker}<color={mark.Hex}><b>{mark.Label}</b> — {mark.Rule}</color>"
-            : $"{Marker}<color={mark.Hex}>{mark.Rule}</color>";
+        // External providers must run before the refinable-item UID lookup. Junk and consumables do not
+        // share that layout; reading their offset as a UID can fail, but their market details are valid.
+        string? externalDetails = ValeLootTooltipApi.BuildDetails(data);
+        string? ownDetails = null;
+        if (_refinableType != IntPtr.Zero
+            && IL2CPP.il2cpp_class_is_assignable_from(_refinableType, Il2CppMeta.ClassOf(data)))
+        {
+            string? uid = Il2CppMeta.ReadStringField(data, _uidFieldOffset);
+            if (uid is not null && InventoryPaint.TryGetMark(uid, out InventoryPaint.Mark mark) && mark.Level != 0)
+            {
+                /**
+                 * TMP rich text in the rule's own colour, so the line reads the same as the cell it is
+                 * explaining. The rule's own name IS the explanation — there is no second vocabulary to
+                 * invent, because the player wrote the name.
+                 *
+                 * A rule with no `Tag` drops the bold prefix entirely rather than repeating its own name twice.
+                 */
+                ownDetails = mark.Label.Length > 0
+                    ? $"{Marker}<color={mark.Hex}><b>{mark.Label}</b> — {mark.Rule}</color>"
+                    : $"{Marker}<color={mark.Hex}>{mark.Rule}</color>";
+            }
+        }
+        _pending = ownDetails is null
+            ? externalDetails
+            : externalDetails is null ? ownDetails : ownDetails + "\n" + externalDetails;
+        _pendingMinChars = externalDetails is null ? MinTooltipChars : MinExternalTooltipChars;
+        if (_pending is null) Misses++;
     }
 
     /**
@@ -279,9 +291,9 @@ internal static class TooltipInject
         }
 
         string incoming = Il2CppMeta.ReadString(value) ?? "";
-        // The item tooltip is the long one: ~1300 chars against 189 for chat, so a floor separates them
-        // without naming anything. Already-marked text is the game re-setting a value we amended.
-        if (incoming.Length < MinTooltipChars || incoming.Contains(Marker))
+        // The pending latch already proves this is an item hover. Its floor selects the description rather
+        // than the short title/type/weight writes; external providers also support short material bodies.
+        if (incoming.Length < _pendingMinChars || incoming.Contains(Marker))
         {
             _setTextOriginal?.Invoke(self, value, methodInfo);
             return;
@@ -318,4 +330,42 @@ internal static class TooltipInject
     public static string Status()
         => $"tooltip inject: installed {Installed}, enabled {Enabled}, hovers {Hovers}, "
          + $"injected {Injected}, misses {Misses}, errors {Errors}";
+}
+
+/// <summary>
+/// Cooperative item-tooltip extension point for soft-dependent plugins.
+/// Providers run on the UI thread while the hovered cell's item data is valid.
+/// </summary>
+public static class ValeLootTooltipApi
+{
+    private static readonly object Gate = new();
+    private static Func<IntPtr, string?>? _provider;
+
+    public static bool Register(Func<IntPtr, string?> provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        lock (Gate)
+        {
+            if (_provider is not null && !ReferenceEquals(_provider, provider)) return false;
+            _provider = provider;
+            return true;
+        }
+    }
+
+    public static void Unregister(Func<IntPtr, string?> provider)
+    {
+        lock (Gate)
+        {
+            if (ReferenceEquals(_provider, provider)) _provider = null;
+        }
+    }
+
+    internal static string? BuildDetails(IntPtr itemData)
+    {
+        Func<IntPtr, string?>? provider;
+        lock (Gate) provider = _provider;
+        if (provider is null) return null;
+        try { return provider(itemData); }
+        catch { return null; }
+    }
 }
