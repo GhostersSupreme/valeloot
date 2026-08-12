@@ -1740,7 +1740,7 @@ function coach() {
   const stat = match[1];
   const value = match[2] === undefined ? null : Number(match[2]);
   const isPct = match[3] === '%';
-  let html = '<b>' + esc(stat) + '</b> — two different questions, and the <span class="q">%</span> is the whole difference.';
+  let html = '<b>' + esc(stat) + '</b> — choose <span class="v">printed value</span> or <span class="q">roll quality (%)</span>.';
   if (bag.loaded && value !== null) {
     const wanted = stat.toLowerCase();
     let byValue = 0;
