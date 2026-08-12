@@ -76,6 +76,9 @@ internal static class ItemReader
     private static int _statValue = -1;
     private static int _statValueStr = -1;
 
+    /// <summary>The live `EquipType.None` value; enum ordinals move between builds.</summary>
+    private static int? _noChaosType;
+
     /// <summary>`StatType` ordinal -> member name, read from live metadata at boot. Never hardcoded.</summary>
     private static readonly Dictionary<int, string> _statNames = new();
 
@@ -109,6 +112,7 @@ internal static class ItemReader
         IntPtr text = Il2CppMeta.FindClass("TMPro", "TMP_Text", HookCensus.TextAssemblies);
         IntPtr statData = Il2CppMeta.FindClass("", "StatData", HookCensus.GameAssemblies);
         IntPtr statType = Il2CppMeta.FindClass("", "StatType", HookCensus.GameAssemblies);
+        IntPtr equipType = Il2CppMeta.FindClass("", "EquipType", HookCensus.GameAssemblies);
 
         _cellData = Il2CppMeta.PropertyFieldOffset(cell, "Data");
         _cellName = Il2CppMeta.PropertyFieldOffset(cell, "Name");
@@ -145,6 +149,20 @@ internal static class ItemReader
             if (!_statNames.ContainsKey(value)) _statNames[value] = name;
         }
 
+        _noChaosType = null;
+        foreach ((string name, int value) in Il2CppMeta.EnumValues(equipType))
+        {
+            if (string.Equals(name, "None", StringComparison.Ordinal))
+            {
+                _noChaosType = value;
+                break;
+            }
+        }
+        if (_noChaosType is null)
+        {
+            log("item reader: EquipType.None did not resolve — Chaos conditions cannot match this session");
+        }
+
         StatsReadable = _statType >= 0 && _statValue >= 0 && _statNames.Count > 0;
         if (!StatsReadable)
         {
@@ -154,7 +172,8 @@ internal static class ItemReader
 
         Installed = true;
         Summary = $"Data 0x{_cellData:x}, Name 0x{_cellName:x}, Type 0x{_cellType:x}, "
-                + $"{_statNames.Count} stat names, rolls {(StatsReadable ? "readable" : "UNREADABLE")}";
+                + $"{_statNames.Count} stat names, rolls {(StatsReadable ? "readable" : "UNREADABLE")}, "
+                + $"chaos {(_noChaosType is not null ? "readable" : "UNREADABLE")}";
         log($"item reader ready ({Summary})");
         return true;
     }
@@ -165,6 +184,7 @@ internal static class ItemReader
         _layouts.Clear();
         _statNames.Clear();
         _getText = null;
+        _noChaosType = null;
     }
 
     /// <summary>Names the stat behind an ordinal, or "" when the enum did not resolve.</summary>
@@ -224,9 +244,10 @@ internal static class ItemReader
         facts.Id = Il2CppMeta.ReadStringField(itemData, layout.Id) ?? "";
         facts.Refine = layout.Refine >= 0 ? Marshal.ReadInt32(itemData, layout.Refine) : 0;
         facts.Favorite = layout.Favorite >= 0 && Marshal.ReadByte(itemData, layout.Favorite) != 0;
-        // A chaos type of 0 is the enum's "none". Any other member means the item carries one; which
-        // one has no filter vocabulary yet, so it is not read.
-        facts.HasChaos = layout.ChaosType >= 0 && Marshal.ReadInt32(itemData, layout.ChaosType) != 0;
+        if (layout.ChaosType >= 0 && _noChaosType is int noChaosType)
+        {
+            facts.SetChaosType(Marshal.ReadInt32(itemData, layout.ChaosType), noChaosType);
+        }
 
         if (StatsReadable && layout.Substats >= 0)
         {

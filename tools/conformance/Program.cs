@@ -85,6 +85,7 @@ internal static class Program
         VerifyAnyOf();
         VerifyDisplayedStatRules();
         VerifyStatAliases();
+        VerifyChaosType();
 
         string[] files = Directory.GetFiles(directory, "*.txt");
         Array.Sort(files, StringComparer.Ordinal);
@@ -100,6 +101,54 @@ internal static class Program
 
         Console.Out.Write(json.ToString());
         return 0;
+    }
+
+    /// <summary>Raw EquipType values must be compared with the live enum's None member.</summary>
+    private static void VerifyChaosType()
+    {
+        var item = new LootFilter.ItemFacts();
+        var chaos = new LootFilter.LootCondition { HasChaos = true };
+        var noChaos = new LootFilter.LootCondition { HasChaos = false };
+
+        item.SetChaosType(-1, -1);
+        AssertCondition(false, item, chaos, "EquipType.None is not chaos");
+        AssertCondition(true, item, noChaos, "EquipType.None satisfies NoChaos");
+
+        item.SetChaosType(0, -1);
+        AssertCondition(true, item, chaos, "a zero-valued weapon type can be chaos");
+        AssertCondition(false, item, noChaos, "a chaos weapon does not satisfy NoChaos");
+
+        const string itemId = "azure-cutlass-repro";
+        ItemCatalog.SetCap(itemId, 1, 3);
+        ItemCatalog.SetCap(itemId, 2, 5);
+        ItemCatalog.SetCap(itemId, 3, 5);
+        ItemCatalog.SetCap(itemId, 4, 9);
+        var weapon = new LootFilter.ItemFacts { Id = itemId, Type = "Sword" };
+        weapon.AddStat("Int", 1, 100, "");
+        weapon.AddStat("Matk", 2, 100, "");
+        weapon.AddStat("DamageMagic", 3, 100, "");
+        weapon.AddStat("CritDamage", 4, 100, "");
+
+        FilterParser.ParsedFilter parsed = FilterParser.Parse(
+            """
+            Show "MATK — Chaos Perfect Weapon (6 top)"
+                Type        Sword
+                Chaos
+                TopRolls    >= 4
+                Stat        Int >= 0%
+                Stat        Matk >= 0%
+                Stat        MagicDamage >= 0%
+                StatMatches >= 3
+                AnyOf
+                    Stat    Matk >= 3
+            """);
+        if (parsed.Errors.Length != 0 || parsed.Rules.Length != 1)
+            throw new InvalidOperationException("could not parse the Chaos weapon regression rule");
+
+        weapon.SetChaosType(-1, -1);
+        AssertCondition(false, weapon, parsed.Rules[0].When, "unchaosed perfect weapon");
+        weapon.SetChaosType(0, -1);
+        AssertCondition(true, weapon, parsed.Rules[0].When, "chaosed perfect weapon");
     }
 
     /// <summary>Executable contract for the count aggregation added by StatMatches.</summary>

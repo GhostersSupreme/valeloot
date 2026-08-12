@@ -91,6 +91,12 @@ internal static class LootFilter
             StatCount = 0;
         }
 
+        /// <summary>Translate the live `EquipType` stored in `EquipData.ChaosType` into a rule fact.</summary>
+        public void SetChaosType(int chaosType, int noneType)
+        {
+            HasChaos = chaosType != noneType;
+        }
+
         public void AddStat(string name, int statType, int roll, string tier)
         {
             if (StatCount >= MaxStats) return;
