@@ -468,12 +468,14 @@ h3.sec{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(
 #coach .v{color:#8fc4ef}
 #coach .n{color:var(--warn);font-variant-numeric:tabular-nums}
 .ac{position:absolute;z-index:30;background:#0a0e0c;border:1px solid var(--line2);border-radius:4px;
-  box-shadow:0 14px 32px rgba(0,0,0,.65);max-height:230px;overflow:auto;min-width:250px;padding:3px}
+  box-shadow:0 14px 32px rgba(0,0,0,.65);max-height:204px;overflow:auto;min-width:0;padding:3px}
 .ac div{padding:4px 8px;border-radius:3px;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12px}
 .ac div.on{background:rgba(200,169,97,.14)}
-.ac b{font-weight:600;color:var(--ink);font-family:var(--mono);font-size:11.5px}
-.ac .help{color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ac .meta{margin-left:auto;color:var(--gold-dim);font-size:10.5px;flex:none}
+.ac b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink);
+  font-family:var(--mono);font-size:11.5px}
+.ac .help{min-width:0;color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac .meta{margin-left:auto;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--gold-dim);font:10.5px var(--mono);flex:none}
 .txtfoot{flex:none;display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--line);
   font-size:11.5px;color:var(--faint)}
 
@@ -1800,28 +1802,40 @@ function itemContext(line, lineStart) {
   return { kind: 'item', token: after.replace(/^"/, ''), from: lineStart + line.length - after.length };
 }
 
-function statCandidates(hit) {
+function statCandidates(query) {
   const aliases = Array.isArray(VL.STAT_ALIASES) ? VL.STAT_ALIASES : [];
   const available = new Set(vocab.stats.map((stat) => stat.toLowerCase()));
+  const paired = new Set();
   const out = [];
-  const seen = new Set();
+  const q = query.toLowerCase();
+  const rank = (value) => {
+    const lower = value.toLowerCase();
+    if (!q) return 1;
+    if (lower === q) return 0;
+    if (lower.startsWith(q)) return 1;
+    return q.length > 1 && lower.includes(q) ? 2 : -1;
+  };
 
-  // Friendly spellings lead, but only for stats this game build actually exposes.
+  // One concept per alias pair. The spelling a player writes is primary; the game's canonical enum
+  // name remains visible and searchable without becoming a duplicate row.
   for (const alias of aliases) {
-    if (!available.has(alias.internal.toLowerCase()) && !available.has(alias.friendly.toLowerCase())) continue;
-    if (!hit(alias.friendly) && !hit(alias.internal)) continue;
-    out.push({ text: alias.friendly, help: 'friendly name', meta: 'internal: ' + alias.internal });
-    seen.add(alias.friendly.toLowerCase());
+    const friendly = alias.friendly.toLowerCase();
+    const internal = alias.internal.toLowerCase();
+    if (!available.has(internal) && !available.has(friendly)) continue;
+    paired.add(friendly);
+    paired.add(internal);
+    const score = Math.min(...[rank(alias.friendly), rank(alias.internal)].filter((value) => value >= 0));
+    if (!Number.isFinite(score)) continue;
+    out.push({ text: alias.friendly, meta: alias.internal, rank: score });
   }
 
-  // Internal names remain discoverable and valid for every existing filter.
   for (const stat of vocab.stats) {
-    if (seen.has(stat.toLowerCase()) || !hit(stat)) continue;
-    const alias = aliases.find((entry) => entry.internal.toLowerCase() === stat.toLowerCase());
-    out.push({ text: stat, meta: alias ? 'friendly: ' + alias.friendly : undefined });
-    seen.add(stat.toLowerCase());
+    if (paired.has(stat.toLowerCase())) continue;
+    const score = rank(stat);
+    if (score >= 0) out.push({ text: stat, rank: score });
   }
-  return out.slice(0, 60);
+  return out.sort((a, b) => a.rank - b.rank || a.text.localeCompare(b.text))
+    .slice(0, 60).map(({ rank: _rank, ...item }) => item);
 }
 
 function candidates(context) {
@@ -1840,7 +1854,7 @@ function candidates(context) {
       help: served.sounds ? 'in valeloot-sounds/ — click \u25b6 to hear it' : 'built in — click \u25b6 to hear it',
     }));
   }
-  if (context.kind === 'stat') return statCandidates(hit);
+  if (context.kind === 'stat') return statCandidates(context.token);
   if (context.kind === 'type') return vocab.types.filter(hit).slice(0, 60).map((t) => ({ text: t }));
   if (context.kind === 'item') {
     // The type travels with the name: two items called "… Fang Clip" are only distinguishable by it.
@@ -1855,8 +1869,8 @@ function showAC(force) {
   if (!context || (!force && !context.token)) return hideAC();
   const list = candidates(context);
   if (!list.length) return hideAC();
-  acItems = list; acIndex = 0; acRange = context;
   hideAC();
+  acItems = list; acIndex = 0; acRange = context;
   const box = document.createElement('div');
   box.className = 'ac';
   box.id = 'ac';
@@ -1867,7 +1881,9 @@ function showAC(force) {
   document.querySelector('.edit').appendChild(box);
   const upto = src.value.slice(0, src.selectionStart).split('\n');
   const row = $('hl').children[upto.length - 1];
-  box.style.left = Math.min(42 + upto[upto.length - 1].length * 7, 150) + 'px';
+  const left = Math.min(42 + upto[upto.length - 1].length * 7, 150);
+  box.style.left = left + 'px';
+  box.style.width = 'min(360px, calc(100% - ' + (left + 6) + 'px))';
   box.style.top = ((row ? row.offsetTop : 10) - src.scrollTop + 22) + 'px';
   box.addEventListener('mousedown', (event) => {
     event.preventDefault();
@@ -3144,7 +3160,10 @@ src.addEventListener('keydown', (event) => {
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault();
     acIndex = (acIndex + (event.key === 'ArrowDown' ? 1 : acItems.length - 1)) % acItems.length;
-    [...document.querySelectorAll('#ac div')].forEach((el, i) => el.classList.toggle('on', i === acIndex));
+    [...document.querySelectorAll('#ac div')].forEach((el, i) => {
+      el.classList.toggle('on', i === acIndex);
+      if (i === acIndex) el.scrollIntoView({ block: 'nearest' });
+    });
     return;
   }
   if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); accept(acIndex); return; }
