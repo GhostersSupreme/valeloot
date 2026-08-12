@@ -62,6 +62,8 @@ export interface OwnedGear {
   /** Mean hidden roll percentage across placeable lines; null when none could be placed. */
   avgRollPct: number | null;
   favorite: boolean;
+  /** Chaos effect: an added extra substat or an over-roll; null when an older snapshot cannot say. */
+  hasChaos: boolean | null;
   /** Set when the caller's catalog has no such item (unreleased, or renamed). */
   unknown?: true;
 }

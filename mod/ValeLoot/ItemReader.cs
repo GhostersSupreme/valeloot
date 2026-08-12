@@ -325,7 +325,7 @@ internal static class ItemReader
         if (facts.Type.Length > 0) parts.Append(' ').Append(facts.Type);
         if (facts.Refine > 0) parts.Append(" +").Append(facts.Refine);
         if (facts.Favorite) parts.Append(" fav");
-        if (facts.HasChaos) parts.Append(" chaos");
+        if (facts.HasChaosEffect()) parts.Append(" chaos");
         for (int i = 0; i < facts.StatCount; i++)
         {
             parts.Append(i == 0 ? " — " : ", ")

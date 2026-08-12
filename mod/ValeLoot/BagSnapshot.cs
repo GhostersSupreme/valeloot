@@ -67,7 +67,7 @@ internal static class BagSnapshot
     public const string FileName = "valeloot-bag.txt";
 
     /// <summary>Bumped only for a change the editor's parser must notice. Written as `# version N`.</summary>
-    private const int FormatVersion = 2;
+    private const int FormatVersion = 3;
 
     /// <summary>
     /// A ceiling on accumulation, so a long session cannot grow this without bound. Well above any
@@ -88,6 +88,7 @@ internal static class BagSnapshot
         public readonly string Type;
         public readonly int Refine;
         public readonly bool Favorite;
+        public readonly bool HasChaos;
         public readonly string[] StatNames;
         public readonly int[] StatRolls;
         /// <summary>The value the game prints for each line, or -1 where the catalog could not say.</summary>
@@ -96,7 +97,8 @@ internal static class BagSnapshot
         public readonly int TopRolls;
 
         public Row(long hash, string uid, string itemId, string displayName, string type, int refine,
-                   bool favorite, string[] statNames, int[] statRolls, int[] statPrinted, int topRolls)
+                   bool favorite, bool hasChaos, string[] statNames, int[] statRolls, int[] statPrinted,
+                   int topRolls)
         {
             Hash = hash;
             Uid = uid;
@@ -105,6 +107,7 @@ internal static class BagSnapshot
             Type = type;
             Refine = refine;
             Favorite = favorite;
+            HasChaos = hasChaos;
             StatNames = statNames;
             StatRolls = statRolls;
             StatPrinted = statPrinted;
@@ -354,7 +357,8 @@ internal static class BagSnapshot
                 lines[i] = new EditorServer.BagLine(row.StatNames[i], row.StatRolls[i], row.StatPrinted[i]);
             }
             items[at++] = new EditorServer.BagItem(row.Uid, row.ItemId, row.DisplayName, row.Type,
-                                                   row.Refine, row.Favorite, row.TopRolls, lines);
+                                                   row.Refine, row.Favorite, row.HasChaos, row.TopRolls,
+                                                   lines);
         }
 
         EditorServer.PublishBag(items, _threshold, _truncated);
@@ -379,6 +383,7 @@ internal static class BagSnapshot
             for (int i = 0; i < uid.Length; i++) hash = (hash ^ uid[i]) * 1099511628211L;
             hash = (hash ^ (uint)facts.Refine) * 1099511628211L;
             hash = (hash ^ (facts.Favorite ? 1L : 0L)) * 1099511628211L;
+            hash = (hash ^ (facts.HasChaosEffect() ? 1L : 0L)) * 1099511628211L;
             for (int i = 0; i < facts.StatCount; i++)
             {
                 hash = (hash ^ (uint)facts.StatTypes[i]) * 1099511628211L;
@@ -426,7 +431,7 @@ internal static class BagSnapshot
         if (type.Length == 0) type = facts.Type;
 
         return new Row(hash, Clean(uid), Clean(facts.Id), Clean(display), Clean(type),
-                       facts.Refine, facts.Favorite, names, rolls, printed,
+                       facts.Refine, facts.Favorite, facts.HasChaosEffect(), names, rolls, printed,
                        topRollsKnown ? topRolls : -1);
     }
 
@@ -493,7 +498,7 @@ internal static class BagSnapshot
         }
         text.Append("# generated: ")
             .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)).Append('\n')
-            .Append("# uid\titemId\tdisplayName\ttype\trefine\tfavorite\ttopRolls\thighRolls\tavgRollPct\tstats\n");
+            .Append("# uid\titemId\tdisplayName\ttype\trefine\tfavorite\thasChaos\ttopRolls\thighRolls\tavgRollPct\tstats\n");
 
         foreach (Row row in rows)
         {
@@ -511,6 +516,7 @@ internal static class BagSnapshot
                 .Append(row.Type.Length > 0 ? row.Type : "-").Append('\t')
                 .Append(row.Refine.ToString(CultureInfo.InvariantCulture)).Append('\t')
                 .Append(row.Favorite ? '1' : '0').Append('\t')
+                .Append(row.HasChaos ? '1' : '0').Append('\t')
                 .Append(row.TopRolls < 0 ? "-" : row.TopRolls.ToString(CultureInfo.InvariantCulture)).Append('\t')
                 .Append(highRolls.ToString(CultureInfo.InvariantCulture)).Append('\t');
 

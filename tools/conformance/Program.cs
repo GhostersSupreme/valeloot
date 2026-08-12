@@ -114,9 +114,16 @@ internal static class Program
         AssertCondition(false, item, chaos, "EquipType.None is not chaos");
         AssertCondition(true, item, noChaos, "EquipType.None satisfies NoChaos");
 
+        item.AddStat("Over", 0, 101, "");
+        AssertCondition(true, item, chaos, "an over-roll is chaos without an extra substat");
+        AssertCondition(false, item, noChaos, "an over-roll does not satisfy NoChaos");
+
+        item.Reset();
+
         item.SetChaosType(0, -1);
         AssertCondition(true, item, chaos, "a zero-valued weapon type can be chaos");
         AssertCondition(false, item, noChaos, "a chaos weapon does not satisfy NoChaos");
+
 
         const string itemId = "azure-cutlass-repro";
         ItemCatalog.SetCap(itemId, 1, 3);

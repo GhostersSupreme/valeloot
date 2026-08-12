@@ -276,6 +276,12 @@ the game hands the mod one page of cells at a time, so the count starts as the p
 fills in as you scroll and switch tabs. A count that quietly described twelve items of a
 two-hundred-item bag would be worse than no count.
 
+Click an item to open its match inspector. It shows the current winning result and every condition the
+selected rule passed or failed, while keeping the rule-from-item, always-show and always-hide controls.
+You can save a warning-only expectation for that item and rule/result. Expectations rerun after edits
+and reordering; a failure is shown below the bag and in the Text tab, but never changes the filter or
+blocks Save.
+
 The same editor, without the game running
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -353,8 +359,8 @@ Conditions (all optional, and all must hold for the block to match):
     AvgRollPct < 35         mean hidden roll percentage across the item's lines
     AvgRoll < 35            backward-compatible alias for AvgRollPct
     Refine >= 5             refine level at least this
-    OverRoll / NoOverRoll   has a line that rolled past 100% - the chaos over-roll
-    Chaos / NoChaos         has a chaos type, or has not
+    OverRoll / NoOverRoll   has a line that rolled past 100% - the narrow over-roll form of Chaos
+    Chaos / NoChaos         has an extra substat OR a roll past 100%, or has neither
     Favorite / NotFavorite  the game's own favourite flag
 
 Stat also accepts these player-facing names; the internal names remain valid:

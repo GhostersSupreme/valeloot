@@ -133,7 +133,7 @@ export interface LootCondition {
   names?: string[];
   /** Only items whose upgrade comparison reached one of these verdicts. */
   verdicts?: Verdict[];
-  /** Only items with a chaos substat (or only ones without). */
+  /** Only items with a Chaos effect—an added extra substat or an over-roll—or only ones without. */
   hasChaos?: boolean;
   /**
    * Only items the player has flagged as a favourite in game (or only ones they have not).
@@ -347,8 +347,9 @@ export function matchesCondition(item: OwnedGear, when: LootCondition, context: 
   }
 
   if (when.hasChaos !== undefined) {
-    const hasChaos = item.lines.some((line) => line.isChaos);
-    if (hasChaos !== when.hasChaos) return false;
+    const hasChaos = item.hasChaos === true || item.lines.some((line) => line.over)
+      ? true : item.hasChaos;
+    if (hasChaos === null || hasChaos !== when.hasChaos) return false;
   }
 
   if (when.overRoll !== undefined) {
@@ -428,6 +429,175 @@ export function matchesCondition(item: OwnedGear, when: LootCondition, context: 
   }
 
   return true;
+}
+
+export type ConditionCheckStatus = 'pass' | 'fail' | 'unavailable';
+
+export interface ConditionCheck {
+  key: string;
+  label: string;
+  expected: string;
+  actual: string;
+  status: ConditionCheckStatus;
+}
+
+export interface ConditionExplanation {
+  matches: boolean;
+  available: boolean;
+  checks: ConditionCheck[];
+}
+
+/**
+ * Explain every active condition without changing matcher semantics.
+ *
+ * `matchesCondition` remains the allocation-free hot path. This diagnostic path calls it for the
+ * authoritative result, then materialises player-facing checks only when the editor asks for them.
+ */
+export function explainCondition(
+  item: OwnedGear,
+  when: LootCondition,
+  context: LootContext,
+): ConditionExplanation {
+  const checks: ConditionCheck[] = [];
+  const add = (
+    key: string,
+    label: string,
+    expected: string,
+    actual: string,
+    pass: boolean,
+    unavailable = false,
+  ) => checks.push({
+    key,
+    label,
+    expected,
+    actual,
+    status: unavailable ? 'unavailable' : pass ? 'pass' : 'fail',
+  });
+
+  if (when.slotTypes?.length) {
+    add('type', 'Type', when.slotTypes.join(' or '), item.slotType || 'unknown',
+      when.slotTypes.includes(item.slotType));
+  }
+  if (when.names?.length) {
+    const actual = item.name || item.itemId || 'unknown';
+    const lower = item.name.toLowerCase();
+    add('name', 'Name contains', when.names.join(' or '), actual,
+      when.names.some((wanted) => lower.includes(wanted.toLowerCase())));
+  }
+  if (when.minRefine !== undefined) {
+    add('refine-min', 'Refine', `at least ${when.minRefine}`, String(item.refine),
+      item.refine >= when.minRefine);
+  }
+  if (when.minTopRolls !== undefined) {
+    add('top-min', 'Top rolls', `at least ${when.minTopRolls}`,
+      item.topRolls === null ? 'not recorded' : String(item.topRolls),
+      item.topRolls !== null && item.topRolls >= when.minTopRolls, item.topRolls === null);
+  }
+  if (when.maxTopRolls !== undefined) {
+    add('top-max', 'Top rolls', `at most ${when.maxTopRolls}`,
+      item.topRolls === null ? 'not recorded' : String(item.topRolls),
+      item.topRolls !== null && item.topRolls <= when.maxTopRolls, item.topRolls === null);
+  }
+  if (when.minHighRolls !== undefined) {
+    add('high-min', `Rolls at ${context.threshold}%`, `at least ${when.minHighRolls}`,
+      String(item.highRolls), item.highRolls >= when.minHighRolls);
+  }
+  if (when.maxHighRolls !== undefined) {
+    add('high-max', `Rolls at ${context.threshold}%`, `at most ${when.maxHighRolls}`,
+      String(item.highRolls), item.highRolls <= when.maxHighRolls);
+  }
+  if (when.minAvgRollPct !== undefined) {
+    add('average-min', 'Average roll', `at least ${when.minAvgRollPct}%`,
+      item.avgRollPct === null ? 'not recorded' : `${Math.round(item.avgRollPct)}%`,
+      item.avgRollPct !== null && item.avgRollPct >= when.minAvgRollPct, item.avgRollPct === null);
+  }
+  if (when.maxAvgRollPct !== undefined) {
+    add('average-max', 'Average roll', `at most ${when.maxAvgRollPct}%`,
+      item.avgRollPct === null ? 'not recorded' : `${Math.round(item.avgRollPct)}%`,
+      item.avgRollPct !== null && item.avgRollPct <= when.maxAvgRollPct, item.avgRollPct === null);
+  }
+  if (when.unknown !== undefined) {
+    add('known', 'Catalog status', when.unknown ? 'unknown' : 'known',
+      item.unknown ? 'unknown' : 'known', Boolean(item.unknown) === when.unknown);
+  }
+  if (when.favorite !== undefined) {
+    add('favorite', 'Favourite', when.favorite ? 'yes' : 'no',
+      item.favorite ? 'yes' : 'no', item.favorite === when.favorite);
+  }
+  if (when.hasChaos !== undefined) {
+    const over = item.lines.some((line) => line.over);
+    const hasChaos = item.hasChaos === true || over ? true : item.hasChaos;
+    add('chaos', 'Chaos', when.hasChaos ? 'present' : 'absent',
+      hasChaos === null ? 'not recorded' : hasChaos ? 'present' : 'absent',
+      hasChaos !== null && hasChaos === when.hasChaos, hasChaos === null);
+  }
+  if (when.overRoll !== undefined) {
+    const over = item.lines.some((line) => line.over);
+    add('overroll', 'Over-roll', when.overRoll ? 'present' : 'absent',
+      over ? 'present' : 'absent', over === when.overRoll);
+  }
+
+  const boundedStats = when.minStatMatches !== undefined || when.maxStatMatches !== undefined;
+  let statHits = 0;
+  if (when.stats?.length) {
+    for (const condition of when.stats) {
+      const pass = matchesStat(item, condition);
+      if (pass) statHits++;
+      const bounds = [
+        condition.minRollPct === undefined ? '' : `${condition.minRollPct}% roll`,
+        condition.minValue === undefined ? '' : `value ${condition.minValue}`,
+      ].filter(Boolean).join(', ') || 'present';
+      const line = item.lines.find((candidate) =>
+        candidate.stat.toLowerCase() === canonicalStatName(condition.stat).toLowerCase());
+      const actual = !line ? 'missing'
+        : `${line.base}${line.rollPct === null ? '' : ` · ${Math.round(line.rollPct)}%`}`;
+      add(`stat-${condition.stat}`, condition.stat, bounds, actual, pass);
+    }
+    if (boundedStats) {
+      if (when.minStatMatches !== undefined) {
+        add('statmatches-min', 'Matching stats', `at least ${when.minStatMatches}`,
+          String(statHits), statHits >= when.minStatMatches);
+      }
+      if (when.maxStatMatches !== undefined) {
+        add('statmatches-max', 'Matching stats', `at most ${when.maxStatMatches}`,
+          String(statHits), statHits <= when.maxStatMatches);
+      }
+    } else if (when.statMode === 'any') {
+      add('statmode-any', 'Listed stats', 'at least one', `${statHits} matched`, statHits > 0);
+    }
+  } else if (boundedStats) {
+    add('statmatches-missing', 'Matching stats', 'a Stat list', 'no Stat lines', false);
+  }
+
+  for (let groupIndex = 0; groupIndex < (when.anyOfStats?.length ?? 0); groupIndex++) {
+    const group = when.anyOfStats![groupIndex];
+    const hits = group.filter((condition) => matchesStat(item, condition)).length;
+    add(`anyof-${groupIndex}`, `AnyOf ${groupIndex + 1}`,
+      group.map((condition) => condition.stat).join(' or '), `${hits} matched`, hits > 0);
+  }
+
+  if (when.minSharedStats !== undefined) {
+    const worn = context.wornStats;
+    let shared = 0;
+    if (worn) {
+      const lower = new Set([...worn].map((stat) => stat.toLowerCase()));
+      for (const line of item.lines) if (lower.has(line.stat.toLowerCase())) shared++;
+    }
+    add('shared', 'Shared stats', `at least ${when.minSharedStats}`,
+      worn ? String(shared) : 'worn gear unavailable',
+      Boolean(worn) && shared >= when.minSharedStats, !worn);
+  }
+  if (when.verdicts?.length) {
+    const verdict = item.uid ? context.verdictByUid?.get(item.uid) : undefined;
+    add('verdict', 'Verdict', when.verdicts.join(' or '), verdict ?? 'unavailable',
+      verdict !== undefined && when.verdicts.includes(verdict), verdict === undefined);
+  }
+
+  return {
+    matches: matchesCondition(item, when, context),
+    available: checks.every((check) => check.status !== 'unavailable'),
+    checks,
+  };
 }
 
 /**

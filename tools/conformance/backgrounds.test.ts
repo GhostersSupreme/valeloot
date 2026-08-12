@@ -5,7 +5,7 @@ import type { OwnedGear } from '../../src/filter/types.ts';
 
 const item: OwnedGear = {
   uid: 'one', itemId: 'Card One', name: 'Card One', slotType: 'Card', refine: 0,
-  lines: [], topRolls: 0, highRolls: 0, avgRollPct: null, favorite: false,
+  lines: [], topRolls: 0, highRolls: 0, avgRollPct: null, favorite: false, hasChaos: false,
 };
 
 test('background modes survive parse, format, and matching', () => {

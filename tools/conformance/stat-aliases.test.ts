@@ -19,6 +19,8 @@ function itemWith(stat: string): OwnedGear {
     topRolls: 0,
     highRolls: 0,
     avgRollPct: 80,
+    favorite: false,
+    hasChaos: false,
   };
 }
 

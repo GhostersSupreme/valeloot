@@ -71,7 +71,7 @@ internal static class LootFilter
         public string Type = "";
         public int Refine;
         public bool Favorite;
-        public bool HasChaos;
+        public bool HasChaosExtraStat;
 
         public int StatCount;
         public readonly string[] StatNames = new string[MaxStats];
@@ -87,14 +87,14 @@ internal static class LootFilter
             Type = "";
             Refine = 0;
             Favorite = false;
-            HasChaos = false;
+            HasChaosExtraStat = false;
             StatCount = 0;
         }
 
-        /// <summary>Translate the live `EquipType` stored in `EquipData.ChaosType` into a rule fact.</summary>
+        /// <summary>Record whether `EquipData.ChaosType` identifies a Chaos-added extra substat.</summary>
         public void SetChaosType(int chaosType, int noneType)
         {
-            HasChaos = chaosType != noneType;
+            HasChaosExtraStat = chaosType != noneType;
         }
 
         public void AddStat(string name, int statType, int roll, string tier)
@@ -155,6 +155,12 @@ internal static class LootFilter
         {
             for (int i = 0; i < StatCount; i++) if (StatRolls[i] > 100) return true;
             return false;
+        }
+
+        /// <summary>Chaos means either its extra substat form or its over-roll form.</summary>
+        public bool HasChaosEffect()
+        {
+            return HasChaosExtraStat || HasOverRoll();
         }
     }
 
@@ -397,7 +403,7 @@ internal static class LootFilter
         }
 
         if (when.MinRefine is int minRefine && item.Refine < minRefine) return false;
-        if (when.HasChaos is bool chaos && item.HasChaos != chaos) return false;
+        if (when.HasChaos is bool chaos && item.HasChaosEffect() != chaos) return false;
         if (when.Favorite is bool favorite && item.Favorite != favorite) return false;
         if (when.OverRoll is bool over && item.HasOverRoll() != over) return false;
 

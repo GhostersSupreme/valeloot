@@ -122,7 +122,7 @@ header{display:flex;align-items:center;gap:14px;padding:0 14px;height:44px;flex:
 #gate .f8 b{color:var(--gold);font-weight:700}
 
 /* ─────────────── shell ─────────────── */
-main{flex:1;display:grid;grid-template-columns:400px 1fr;min-height:0}
+main{flex:1;display:grid;grid-template-columns:360px minmax(420px,1fr) 360px;min-height:0}
 .rail{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
 .stage{display:flex;flex-direction:column;min-height:0;min-width:0}
 .tabs{display:flex;flex:none;border-bottom:1px solid var(--line);background:var(--sunk)}
@@ -261,18 +261,61 @@ main{flex:1;display:grid;grid-template-columns:400px 1fr;min-height:0}
 #note .st s{text-decoration:none;color:var(--bad)}
 #note .rollhi{color:var(--gold)}
 
-/* Item action strip, from clicking a cell */
-#act{flex:none;border-top:1px solid var(--line);background:var(--panel);padding:10px 16px;display:none}
-#act.on{display:block}
-#act .top{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
-#act h3{margin:0;font-size:14px;font-weight:600}
+/* Item inspector — persistent on wide screens, a drawer when the bag needs the width. */
+#act{min-width:0;overflow:auto;border-left:1px solid var(--line);background:var(--panel);padding:14px;
+  display:flex;flex-direction:column;gap:14px}
+#act .inspect-empty{margin:auto;color:var(--faint);font-size:12px;line-height:1.65;text-align:center;max-width:25ch}
+#act .top{display:flex;align-items:flex-start;gap:10px}
+#act .top>div{min-width:0}
+#act h3{margin:0;font-size:15px;font-weight:600;overflow-wrap:anywhere}
 #act .meta{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
 #act .row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
-#act .lbl{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin-right:2px}
+#act .lbl,.inspect-sec h4{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint);
+  margin:0 0 7px}
+#act .close{margin-left:auto;flex:none}
+.inspect-verdict{border:1px solid var(--line);border-left:3px solid var(--gold);background:var(--sunk);
+  padding:9px 10px;font-size:12px;color:var(--dim)}
+.inspect-verdict b{color:var(--ink)}
+.inspect-sec{border-top:1px solid var(--line);padding-top:12px}
+.checks{display:flex;flex-direction:column;gap:5px}
+.check{display:grid;grid-template-columns:18px minmax(0,1fr);gap:1px 7px;padding:6px 7px;
+  background:var(--sunk);border:1px solid var(--line);border-radius:3px;font-size:11.5px}
+.check i{grid-row:1/3;font-style:normal;font-weight:700}
+.check.pass i{color:#7fc99a}.check.fail i{color:var(--bad)}.check.unavailable i{color:var(--warn)}
+.check b{font-weight:600;color:var(--ink)}.check span{grid-column:2;color:var(--faint);font:10.5px var(--mono)}
+.inspect-stats{font:11px/1.65 var(--mono);color:var(--dim)}
+.inspect-stats u{text-decoration:none;color:var(--warn)}
 .mk{background:#141a17;border:1px solid var(--line2);border-radius:4px;color:var(--dim);
   padding:4px 9px;font:11.5px var(--mono)}
 .mk:hover{border-color:var(--gold-dim);color:var(--ink)}
 .mk b{color:var(--gold);font-weight:600}
+.expectbar{flex:none;border-top:1px solid var(--line);background:var(--panel)}
+.expecthead{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:11.5px;color:var(--faint)}
+.expecthead b{color:var(--ink);font-weight:600}.expecthead .bad{color:var(--bad)}
+.expectlist{max-height:154px;overflow:auto;border-top:1px solid var(--line)}
+.expectrow{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:3px 8px;align-items:center;
+  padding:7px 14px;font-size:11.5px}
+.expectrow+.expectrow{border-top:1px solid var(--line)}
+.expectrow>i{grid-row:1/3;font-style:normal;font-weight:700}
+.expectrow.pass>i{color:#7fc99a}.expectrow.fail>i{color:var(--bad)}.expectrow.unavailable>i{color:var(--warn)}
+.expectrow b{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.expectrow small{grid-column:2;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.expectrow .actions{grid-column:3;grid-row:1/3;display:flex;gap:5px}
+@media(max-width:1180px){
+  main{grid-template-columns:340px minmax(0,1fr)}
+  #act{position:fixed;z-index:35;right:0;top:44px;bottom:35px;width:min(380px,92vw);
+    box-shadow:-18px 0 42px rgba(0,0,0,.62);transform:translateX(102%);transition:transform .16s ease}
+  #act.on{transform:translateX(0)}
+}
+@media(max-width:760px){
+  header .files{display:none}
+  main{grid-template-columns:1fr;grid-template-rows:minmax(260px,44%) minmax(0,1fr)}
+  .rail{border-right:0;border-bottom:1px solid var(--line)}
+  .stagehead{align-items:flex-start;flex-direction:column;gap:4px}
+  .tally{flex-wrap:wrap;gap:4px 10px}
+  .grid{grid-template-columns:repeat(auto-fill,92px)}
+  #act{left:0;top:auto;bottom:0;width:100%;max-height:72vh;border-left:0;border-top:1px solid var(--line2)}
+}
 
 /* ─────────────── the cascade ─────────────── */
 .cascade{padding:8px 10px 40px}
@@ -520,7 +563,8 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
       </div>
       <div id="problems" role="status" aria-live="polite"></div>
       <div id="coach"></div>
-      <div class="txtfoot"><span>ctrl+space suggests</span><span class="grow"></span>
+      <div class="txtfoot"><span>ctrl+space suggests</span><button class="btn tiny" id="expectstatus"></button>
+        <span class="grow"></span>
         <button class="btn tiny" id="tidy" title="reprint the compiled rules — drops comments">tidy</button></div>
     </div>
     <div class="pane" id="pane-help"><div class="help" id="helpbody"></div></div>
@@ -537,8 +581,9 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
       <span id="bagfindcount"></span>
     </div>
     <div class="gridwrap"><div class="grid" id="grid"></div></div>
-    <div id="act"></div>
+    <section class="expectbar" id="expectations" aria-live="polite"></section>
   </section>
+  <aside id="act" aria-label="item match inspector"></aside>
 </main>
 
 <!--
@@ -610,10 +655,10 @@ const CONDITIONS = [
   ['Refine', 'refine level, e.g. >= 1 — minimum only'],
   ['Favorite', "the game's own favourite flag"],
   ['NotFavorite', 'everything you have not flagged'],
-  ['OverRoll', 'a line above its normal maximum — only a chaos widen does that'],
+  ['OverRoll', 'a line above its normal maximum — the narrow over-roll form of Chaos'],
   ['NoOverRoll', 'no line above its maximum'],
-  ['Chaos', 'has a chaos substat'],
-  ['NoChaos', 'has no chaos substat'],
+  ['Chaos', 'has an extra substat or a roll above 100%'],
+  ['NoChaos', 'has neither an extra substat nor a roll above 100%'],
   ['AnyStat', 'match ANY listed stat (default: every one)'],
   ['AllStats', 'match every listed stat'],
   ['Tag', 'short label drawn on the cell'],
@@ -644,9 +689,9 @@ const MOD_REFUSES_HEAD = {
   dismantle: 'Dismantle is an old spelling ValeLoot does not read — write Hide instead',
   alwaysdismantle: 'AlwaysDismantle is an old spelling ValeLoot does not read — write AlwaysHide instead',
 };
-/** Conditions the mod runs but valeloot-bag.txt cannot describe, so the preview must not guess. */
+/** Facts older snapshots cannot describe, so diagnostics must report unavailable instead of guessing. */
 const SNAPSHOT_BLIND = {
-  hasChaos: 'the chaos slot — valeloot-bag.txt version 1 does not record which line is the chaos substat',
+  hasChaos: 'the Chaos effect — refresh the bag with this ValeLoot build to record extra-stat Chaos',
 };
 
 // ─────────────────────────────── state ───────────────────────────────
@@ -673,6 +718,10 @@ let plan = null;               // the last evaluation: rules, marks, counts
 let openRule = null;           // the one expanded accordion row
 let openPicker = null;         // 'color' | 'level' | 'sound' inside the open row
 let selectedUid = null;
+let selectedSnapshot = null;   // saved expectation item when it is no longer in the live bag
+let inspectedRule = null;      // block whose conditions the inspector explains
+const EXPECTATIONS_KEY = 'valeloot.filter-expectations.v1';
+let expectations = loadExpectations();
 let focusRule = null;          // where the keyboard should land after a reorder
 let fileState = { filter: null, items: null, bag: null };
 
@@ -797,7 +846,7 @@ function modLint(text) {
  * serving this page over loopback, and the TSV `valeloot-bag.txt` when the page was opened as a
  * file — and they must produce the SAME item, or every renderer below has to learn the difference.
  * So each reader decodes only its own transport into:
- * `{ uid, itemId, name, type, refine, favorite, topRolls, highRolls, avgRollPct,
+ * `{ uid, itemId, name, type, refine, favorite, hasChaos, topRolls, highRolls, avgRollPct,
  *    lines: [{ stat, roll, printed }] }`.
  * This is the only place that turns that shape into what the bundled matcher takes.
  *
@@ -820,8 +869,7 @@ function bagItem(raw, index) {
       printed,
       q: '',
       rollPct: Number.isFinite(roll) ? roll : null,
-      // Neither source records which line is the chaos substat. Never guessed — a rule asking about
-      // it is reported as unanswerable instead of quietly counting zero.
+      // Chaos is an item-level equipment fact. A line cannot infer it, and no line claims it here.
       isChaos: false,
       over: Number.isFinite(roll) && roll > 100,
     });
@@ -840,6 +888,8 @@ function bagItem(raw, index) {
     slot: null,
     refine: Number(raw.refine) || 0,
     favorite: raw.favorite === true || raw.favorite === 1 || raw.favorite === '1',
+    hasChaos: raw.hasChaos === true || raw.hasChaos === 1 || raw.hasChaos === '1' ? true
+      : raw.hasChaos === false || raw.hasChaos === 0 || raw.hasChaos === '0' ? false : null,
     topRolls: Number.isFinite(top) ? top : null,
     highRolls: Number(raw.highRolls) || 0,
     avgRollPct: Number.isFinite(avg) ? avg : null,
@@ -854,8 +904,9 @@ function bagItem(raw, index) {
 /**
  * Reader one: `valeloot-bag.txt` — what a page opened from the filesystem gets.
  *
- * Version 2 adds distinct displayed `topRolls`, raw `highRolls` and `avgRollPct` columns.
- * Version 1 remains readable, but its threshold count cannot answer displayed `TopRolls`.
+ * Version 3 adds the live item-level `hasChaos` fact. Version 2 added distinct displayed
+ * `topRolls`, raw `highRolls` and `avgRollPct` columns. Older versions remain readable; facts they
+ * did not record stay null and diagnostics say unavailable rather than guessing.
  */
 function parseBag(text) {
   const items = [];
@@ -875,9 +926,9 @@ function parseBag(text) {
       continue;
     }
     const cols = line.split('\t');
+    const v3 = version !== null && version >= 3;
     const v2 = version !== null && version >= 2;
-    const statsAt = v2 ? 9 : 8;
-    if (cols.length <= statsAt) { malformed++; continue; }
+    const statsAt = v3 ? 10 : v2 ? 9 : 8;
     const dash = (value) => (value === '-' || value === '' || value === undefined ? null : value);
     const lines = [];
     if (dash(cols[statsAt])) {
@@ -890,9 +941,10 @@ function parseBag(text) {
     items.push(bagItem({
       uid: dash(cols[0]), itemId: dash(cols[1]), name: dash(cols[2]), type: dash(cols[3]),
       refine: cols[4], favorite: cols[5] === '1',
-      topRolls: v2 ? dash(cols[6]) : null,
-      highRolls: v2 ? cols[7] : cols[6],
-      avgRollPct: dash(v2 ? cols[8] : cols[7]),
+      hasChaos: v3 ? dash(cols[6]) : null,
+      topRolls: v3 ? dash(cols[7]) : v2 ? dash(cols[6]) : null,
+      highRolls: v3 ? cols[8] : v2 ? cols[7] : cols[6],
+      avgRollPct: dash(v3 ? cols[9] : v2 ? cols[8] : cols[7]),
       lines,
     }, items.length));
   }
@@ -1026,9 +1078,9 @@ function evaluate(text) {
     blocks[i].errors = errors.filter((e) => e.line - 1 >= blocks[i].start && e.line - 1 <= blocks[i].end);
     const compiled = parserBad.has(i) ? null : parsed.rules[next++] || null;
     blocks[i].rule = anyBad.has(i) ? null : compiled;
-    // What the snapshot cannot answer about this rule. Not a count of zero: a zero the player cannot
-    // tell apart from "no data" is the failure this whole file exists to avoid.
+    // Older file snapshots cannot identify extra-stat Chaos. An observed over-roll still proves it.
     blocks[i].blind = blocks[i].rule && blocks[i].rule.when.hasChaos !== undefined
+      && bag.items.some((item) => item.hasChaos === null && !item.lines.some((line) => line.over))
       ? SNAPSHOT_BLIND.hasChaos : null;
   }
 
@@ -1425,9 +1477,9 @@ function renderCascade() {
     + 'claims it, so order is the filter.</p>';
 
   if (plan.blindFrom >= 0) {
-    html += '<div class="warn" style="margin:0 0 8px">Rule ' + (plan.blindFrom + 1) + ' asks about the chaos slot, '
-      + 'which the bag snapshot does not record. It is skipped in this preview, so the counts on the rules '
-      + '<b>below</b> it are a lower bound rather than an answer.</div>';
+    html += '<div class="warn" style="margin:0 0 8px">Rule ' + (plan.blindFrom + 1) + ' asks about Chaos, '
+      + 'which this older bag snapshot cannot fully distinguish. It is skipped in this preview, so the counts '
+      + 'on the rules <b>below</b> it are a lower bound rather than an answer.</div>';
   }
 
   html += plan.blocks.map((block, index) => ruleRow(block, index)).join('')
@@ -2387,39 +2439,293 @@ async function enterServed(again) {
   }
 }
 
+function loadExpectations() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(EXPECTATIONS_KEY) || '[]');
+    return Array.isArray(stored) ? stored.filter((entry) => entry && entry.item && entry.contract).slice(0, 100) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistExpectations() {
+  try {
+    localStorage.setItem(EXPECTATIONS_KEY, JSON.stringify(expectations));
+  } catch {
+    say('Saved checks could not be written to this browser\u2019s local storage.', true);
+  }
+}
+
+function inspectionItem() {
+  return bag.items.find((item) => item.uid === selectedUid) || selectedSnapshot;
+}
+
+function sanitizeItem(item) {
+  return {
+    itemId: item.itemId,
+    name: item.name,
+    slotType: item.slotType,
+    refine: item.refine,
+    favorite: item.favorite,
+    hasChaos: item.hasChaos,
+    topRolls: item.topRolls,
+    highRolls: item.highRolls,
+    avgRollPct: item.avgRollPct,
+    lines: item.lines.map((line) => ({
+      stat: line.stat,
+      base: line.base,
+      printed: line.printed,
+      rollPct: line.rollPct,
+      over: line.over,
+    })),
+  };
+}
+
+function ruleReference(index) {
+  const block = plan && plan.blocks[index];
+  return block ? { name: block.name, index } : null;
+}
+
+function resolveRule(reference) {
+  if (!plan || !reference) return -1;
+  const exact = plan.blocks[reference.index];
+  if (exact && exact.name === reference.name && exact.rule) return reference.index;
+  return plan.blocks.findIndex((block) => block.name === reference.name && block.rule);
+}
+
+function filterOutcome(item) {
+  if (!plan) return { available: false, kind: 'unavailable', detail: 'filter is not parsed' };
+  const lowerName = String(item.name).toLowerCase();
+  const lowerId = String(item.itemId).toLowerCase();
+  const named = (values) => values.some((value) => {
+    const lower = String(value).toLowerCase();
+    return lower === lowerName || lower === lowerId;
+  });
+  if (named(plan.parsed.overrides.mute)) {
+    return { available: true, kind: 'hidden', detail: 'AlwaysHide', rule: null };
+  }
+  if (named(plan.parsed.overrides.pin)) {
+    return { available: true, kind: 'shown', detail: 'AlwaysShow', rule: null };
+  }
+  for (let index = 0; index < plan.blocks.length; index++) {
+    const block = plan.blocks[index];
+    if (!block.rule) continue;
+    const explanation = VL.explainCondition(item, block.rule.when, { threshold: plan.threshold });
+    if (!explanation.available) {
+      return { available: false, kind: 'unavailable', detail: 'rule ' + (index + 1) + ' needs facts this snapshot lacks' };
+    }
+    if (!explanation.matches) continue;
+    return {
+      available: true,
+      kind: block.rule.mute ? 'hidden' : 'shown',
+      detail: 'rule ' + (index + 1) + ' \u2014 ' + block.name,
+      rule: ruleReference(index),
+    };
+  }
+  return { available: true, kind: 'unclaimed', detail: 'no rule claims it', rule: null };
+}
+
+function expectationResult(expectation) {
+  if (!plan || plan.errors.length) {
+    return { status: 'unavailable', detail: 'fix filter errors before this check can run' };
+  }
+  if (expectation.contract === 'rule') {
+    const index = resolveRule(expectation.rule);
+    if (index < 0) return { status: 'unavailable', detail: 'the saved rule is missing or rejected' };
+    const block = plan.blocks[index];
+    const explanation = VL.explainCondition(expectation.item, block.rule.when, { threshold: plan.threshold });
+    if (!explanation.available) return { status: 'unavailable', detail: 'the item snapshot lacks a required fact' };
+    const pass = explanation.matches === expectation.expected;
+    return {
+      status: pass ? 'pass' : 'fail',
+      detail: 'rule ' + (index + 1) + ' now ' + (explanation.matches ? 'matches' : 'does not match')
+        + '; expected ' + (expectation.expected ? 'match' : 'no match'),
+      index,
+    };
+  }
+  const actual = filterOutcome(expectation.item);
+  if (!actual.available) return { status: 'unavailable', detail: actual.detail };
+  const sameRule = expectation.expected.rule
+    ? Boolean(actual.rule && actual.rule.name === expectation.expected.rule.name)
+    : !actual.rule && actual.detail === expectation.expected.label;
+  const pass = actual.kind === expectation.expected.kind && sameRule;
+  return {
+    status: pass ? 'pass' : 'fail',
+    detail: actual.detail + '; expected ' + expectation.expected.label,
+    index: actual.rule ? resolveRule(actual.rule) : -1,
+  };
+}
+
+function saveExpectation(contract) {
+  const item = inspectionItem();
+  if (!item || !plan || plan.errors.length) return;
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  if (contract === 'rule') {
+    const block = plan.blocks[inspectedRule];
+    if (!block || !block.rule) return;
+    const explanation = VL.explainCondition(item, block.rule.when, { threshold: plan.threshold });
+    if (!explanation.available) {
+      say('This item snapshot is missing a fact that rule needs, so the check was not saved.', true);
+      return;
+    }
+    expectations.unshift({
+      id,
+      contract: 'rule',
+      item: sanitizeItem(item),
+      itemName: item.name,
+      rule: ruleReference(inspectedRule),
+      expected: explanation.matches,
+    });
+  } else {
+    const outcome = filterOutcome(item);
+    if (!outcome.available) {
+      say('The current filter result is unavailable for this snapshot, so the check was not saved.', true);
+      return;
+    }
+    expectations.unshift({
+      id,
+      contract: 'result',
+      item: sanitizeItem(item),
+      itemName: item.name,
+      expected: {
+        kind: outcome.kind,
+        rule: outcome.rule,
+        label: outcome.detail,
+      },
+    });
+  }
+  expectations = expectations.slice(0, 100);
+  persistExpectations();
+  renderExpectations();
+  say('Saved a warning-only check for ' + item.name + '. Save remains independent of checks.', false, true);
+}
+
+function renderExpectations() {
+  const host = $('expectations');
+  const results = expectations.map((expectation) => ({ expectation, result: expectationResult(expectation) }));
+  const failed = results.filter(({ result }) => result.status === 'fail').length;
+  const unavailable = results.filter(({ result }) => result.status === 'unavailable').length;
+  const status = $('expectstatus');
+  status.textContent = expectations.length
+    ? failed + ' failed \u00b7 ' + unavailable + ' unavailable \u00b7 ' + expectations.length + ' checks'
+    : '0 saved checks';
+  status.style.color = failed ? 'var(--bad)' : unavailable ? 'var(--warn)' : '';
+
+  let html = '<div class="expecthead"><b>saved checks</b><span>warning only \u2014 never blocks Save</span><span class="grow"></span>'
+    + (failed ? '<span class="bad">' + failed + ' failed</span>' : '<span>' + expectations.length + ' total</span>')
+    + '</div>';
+  if (results.length) {
+    html += '<div class="expectlist">' + results.map(({ expectation, result }) => {
+      const icon = result.status === 'pass' ? '\u2713' : result.status === 'fail' ? '\u00d7' : '?';
+      const contract = expectation.contract === 'rule'
+        ? (expectation.expected ? 'should match ' : 'should not match ') + expectation.rule.name
+        : expectation.expected.label;
+      return '<div class="expectrow ' + result.status + '"><i>' + icon + '</i><b>' + esc(expectation.itemName)
+        + '</b><small>' + esc(contract + ' \u00b7 ' + result.detail) + '</small><div class="actions">'
+        + '<button class="btn tiny" data-expinspect="' + esc(expectation.id) + '">fix filter</button>'
+        + '<button class="btn tiny" data-expaccept="' + esc(expectation.id) + '">update</button>'
+        + '<button class="btn tiny" data-expdelete="' + esc(expectation.id) + '">delete</button>'
+        + '</div></div>';
+    }).join('') + '</div>';
+  }
+  host.innerHTML = html;
+}
+
+function inspectExpectation(expectation) {
+  selectedUid = null;
+  selectedSnapshot = expectation.item;
+  const result = expectationResult(expectation);
+  inspectedRule = expectation.contract === 'rule' ? resolveRule(expectation.rule)
+    : result.index >= 0 ? result.index : null;
+  if (inspectedRule !== null && inspectedRule >= 0) {
+    openRule = inspectedRule;
+    renderCascade();
+  }
+  showTab('rules');
+  renderGrid();
+  renderAct();
+}
+
+function updateExpectation(expectation) {
+  if (expectation.contract === 'rule') {
+    const index = resolveRule(expectation.rule);
+    if (index < 0) return;
+    const explanation = VL.explainCondition(expectation.item, plan.blocks[index].rule.when, { threshold: plan.threshold });
+    if (!explanation.available) return;
+    expectation.expected = explanation.matches;
+    expectation.rule = ruleReference(index);
+  } else {
+    const outcome = filterOutcome(expectation.item);
+    if (!outcome.available) return;
+    expectation.expected = { kind: outcome.kind, rule: outcome.rule, label: outcome.detail };
+  }
+  persistExpectations();
+  renderExpectations();
+}
+
+// ───────────────────── item match inspector ─────────────────────
 // ───────────────────── the item action strip ─────────────────────
 function renderAct() {
   const host = $('act');
-  const item = bag.items.find((i) => i.uid === selectedUid);
-  if (!item) { host.className = ''; host.innerHTML = ''; return; }
-  const mark = plan ? plan.marks.get(item.uid) : null;
-  const claim = !mark ? 'no rule claims it'
-    : mark.kind === 'pinned' ? 'pinned — always shown'
-      : mark.kind === 'muted' ? (mark.by === undefined ? 'silenced by name' : 'silenced by rule ' + (mark.by + 1))
-        : 'rule ' + (mark.by + 1) + ' \u2014 ' + plan.blocks[mark.by].name;
+  const item = inspectionItem();
+  if (!item || !plan) {
+    host.className = '';
+    host.innerHTML = '<p class="inspect-empty">Select an item in the bag to see the winning rule and every condition it passed or failed.</p>';
+    return;
+  }
+  const live = bag.items.find((candidate) => candidate.uid === selectedUid);
+  const mark = live ? plan.marks.get(live.uid) : null;
+  if (inspectedRule === null || !plan.blocks[inspectedRule] || !plan.blocks[inspectedRule].rule) {
+    inspectedRule = mark && mark.by !== undefined ? mark.by
+      : plan.blocks.findIndex((block) => block.rule);
+  }
+  const block = inspectedRule >= 0 ? plan.blocks[inspectedRule] : null;
+  const explanation = block && block.rule
+    ? VL.explainCondition(item, block.rule.when, { threshold: plan.threshold })
+    : null;
+  const outcome = filterOutcome(item);
+  const ruleOptions = plan.blocks.map((candidate, index) =>
+    '<option value="' + index + '"' + (index === inspectedRule ? ' selected' : '')
+      + (candidate.rule ? '' : ' disabled') + '>' + (index + 1) + ' \u2014 ' + esc(candidate.name) + '</option>').join('');
+  const chaos = item.hasChaos === null ? 'Chaos not recorded'
+    : item.hasChaos ? 'Chaos effect' : 'no Chaos effect';
+  const checks = explanation && explanation.checks.length
+    ? explanation.checks.map((check) => {
+      const icon = check.status === 'pass' ? '\u2713' : check.status === 'fail' ? '\u00d7' : '?';
+      return '<div class="check ' + check.status + '"><i>' + icon + '</i><b>' + esc(check.label)
+        + '</b><span>' + esc(check.actual + ' \u00b7 wanted ' + check.expected) + '</span></div>';
+    }).join('')
+    : '<p class="empty">No conditions \u2014 this rule claims every remaining item.</p>';
   host.className = 'on';
-  host.innerHTML = '<div class="top"><h3>' + esc(item.name) + '</h3>'
-    + '<span class="meta">' + esc(item.slotType) + (item.refine ? ' · +' + item.refine : '')
-    + (item.topRolls === null ? ' · top rolls unresolved'
-      : ' · ' + item.topRolls + ' top roll' + (item.topRolls === 1 ? '' : 's'))
-    + ' · ' + item.highRolls + ' high roll' + (item.highRolls === 1 ? '' : 's')
-    + ' at ' + (plan ? plan.threshold : 90) + '%'
-    + ' · ' + (item.avgRollPct === null ? 'no average' : Math.round(item.avgRollPct) + '% average')
-    + ' · ' + esc(claim) + '</span></div>'
-    + '<div class="row"><span class="lbl">rule from this</span>'
+  host.innerHTML = '<div class="top"><div><h3>' + esc(item.name) + '</h3><span class="meta">'
+    + esc(item.slotType) + (item.refine ? ' \u00b7 +' + item.refine : '') + ' \u00b7 ' + esc(chaos)
+    + (selectedSnapshot ? ' \u00b7 saved item facts' : '') + '</span></div>'
+    + '<button class="btn tiny close" data-mk="close">close</button></div>'
+    + '<div class="inspect-verdict"><b>Current result:</b> ' + esc(outcome.detail) + '</div>'
+    + '<div class="inspect-sec"><h4>inspect rule</h4><select id="inspectrule" class="chip" style="width:100%">'
+    + ruleOptions + '</select><div class="checks" style="margin-top:8px">' + checks + '</div></div>'
+    + '<div class="inspect-sec"><h4>saved expectations</h4><div class="row">'
+    + '<button class="mk" data-expect="rule">save this rule\u2019s ' + (explanation && explanation.matches ? 'match' : 'non-match') + '</button>'
+    + '<button class="mk" data-expect="result">save current result</button></div>'
+    + '<p class="meta" style="margin:7px 0 0">Checks warn after edits and reordering. They never force a result or block Save.</p></div>'
+    + '<div class="inspect-sec"><h4>item facts</h4><div class="inspect-stats">'
+    + (item.lines.length ? item.lines.map((line) => esc(line.stat) + ' '
+      + (line.printed === null ? '?' : '+' + line.printed)
+      + (line.rollPct === null ? '' : line.rollPct > 100 ? ' <u>' + line.rollPct + '% over</u>' : ' ' + line.rollPct + '%')).join('<br>')
+      : '<em>no substat lines</em>') + '</div></div>'
+    + '<div class="inspect-sec"><h4>build a rule from this item</h4><div class="row">'
     + '<button class="mk" data-mk="name">Name <b>"' + esc(item.name) + '"</b></button>'
     + '<button class="mk" data-mk="type">Type <b>' + esc(item.slotType) + '</b></button>'
     + (item.topRolls ? '<button class="mk" data-mk="top">TopRolls <b>&gt;= ' + item.topRolls + '</b></button>' : '')
     + (item.lines.length ? '<button class="mk" data-mk="stat">Stat <b>' + esc(item.lines[0].stat) + ' &gt;= '
       + (item.lines[0].rollPct === null ? 90 : Math.min(100, item.lines[0].rollPct)) + '%</b></button>' : '')
-    + '<span class="lbl" style="margin-left:12px">just this one</span>'
+    + '</div></div><div class="inspect-sec"><h4>just this item</h4><div class="row">'
     + '<button class="mk" data-mk="pin">always show it</button>'
-    + '<button class="mk" data-mk="mute">never show it</button>'
-    + '<button class="btn tiny" data-mk="close">close</button></div>';
+    + '<button class="mk" data-mk="mute">never show it</button></div></div>';
 }
 
 function ruleFromItem(kind) {
-  const item = bag.items.find((i) => i.uid === selectedUid);
+  const item = inspectionItem();
   if (!item) return;
   const quoted = '"' + item.name.replace(/"/g, "'") + '"';
   if (kind === 'pin') return appendText('AlwaysShow ' + quoted);
@@ -2485,6 +2791,7 @@ function refresh() {
   renderTally();
   renderCascade();
   renderAct();
+  renderExpectations();
   coach();
 }
 
@@ -2516,8 +2823,11 @@ $('cascade').addEventListener('click', (event) => {
   if (d.audition !== undefined) return audition(d.audition);
   if (d.open !== undefined) {
     const index = Number(d.open);
+    if (inspectionItem()) inspectedRule = index;
     if (openRule === index) { openRule = null; } else { openRule = index; openPicker = null; }
-    return renderCascade();
+    renderCascade();
+    renderAct();
+    return;
   }
   if (d.pick !== undefined) { openPicker = openPicker === d.pick ? null : d.pick; return renderCascade(); }
   if (d.color !== undefined) {
@@ -2542,7 +2852,15 @@ $('cascade').addEventListener('click', (event) => {
   if (d.jump !== undefined) return jumpToLine(plan.blocks[Number(d.jump)].head);
   if (d.line !== undefined) return jumpToLine(Number(d.line));
   if (d.t !== undefined) return appendText(TEMPLATES[d.t]);
-  if (d.show !== undefined) { selectedUid = d.show; renderGrid(); renderAct(); return; }
+  if (d.show !== undefined) {
+    selectedUid = d.show;
+    selectedSnapshot = null;
+    const row = hit.closest('.rule');
+    inspectedRule = row ? Number(row.dataset.r) : null;
+    renderGrid();
+    renderAct();
+    return;
+  }
   if (d.unpin !== undefined || d.unmute !== undefined) return dropOverride(d.unpin || d.unmute);
 });
 
@@ -2671,6 +2989,8 @@ $('grid').addEventListener('click', (event) => {
   const cell = event.target.closest('[data-uid]');
   if (!cell) return;
   selectedUid = selectedUid === cell.dataset.uid ? null : cell.dataset.uid;
+  selectedSnapshot = null;
+  inspectedRule = null;
   renderGrid();
   renderAct();
 });
@@ -2679,14 +2999,47 @@ $('grid').addEventListener('keydown', (event) => {
   if (!cell || (event.key !== 'Enter' && event.key !== ' ')) return;
   event.preventDefault();
   selectedUid = cell.dataset.uid;
+  selectedSnapshot = null;
+  inspectedRule = null;
   renderGrid();
   renderAct();
 });
 $('act').addEventListener('click', (event) => {
+  const expectation = event.target.closest('[data-expect]');
+  if (expectation) return saveExpectation(expectation.dataset.expect);
   const hit = event.target.closest('[data-mk]');
   if (!hit) return;
-  if (hit.dataset.mk === 'close') { selectedUid = null; renderGrid(); return renderAct(); }
+  if (hit.dataset.mk === 'close') {
+    selectedUid = null;
+    selectedSnapshot = null;
+    inspectedRule = null;
+    renderGrid();
+    return renderAct();
+  }
   ruleFromItem(hit.dataset.mk);
+});
+$('act').addEventListener('change', (event) => {
+  if (event.target.id !== 'inspectrule') return;
+  inspectedRule = Number(event.target.value);
+  openRule = inspectedRule;
+  renderCascade();
+  renderAct();
+});
+
+$('expectations').addEventListener('click', (event) => {
+  const hit = event.target.closest('[data-expinspect],[data-expaccept],[data-expdelete]');
+  if (!hit) return;
+  const id = hit.dataset.expinspect || hit.dataset.expaccept || hit.dataset.expdelete;
+  const expectation = expectations.find((entry) => entry.id === id);
+  if (!expectation) return;
+  if (hit.dataset.expinspect !== undefined) return inspectExpectation(expectation);
+  if (hit.dataset.expaccept !== undefined) return updateExpectation(expectation);
+  expectations = expectations.filter((entry) => entry.id !== id);
+  persistExpectations();
+  renderExpectations();
+});
+$('expectstatus').addEventListener('click', () => {
+  $('expectations').scrollIntoView({ block: 'nearest' });
 });
 
 src.addEventListener('input', () => { refresh(); showAC(false); });

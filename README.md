@@ -18,11 +18,11 @@ It is complete on its own. No companion app, no server, no account, nothing to s
 > `valeloot-main` full of `.cs` files, which the game cannot load. You want the link above, or the
 > [releases page](https://github.com/bjb2/valeloot/releases/latest).
 
-![The ValeLoot editor beside the game, the same items lit the same colours in both](docs/valeloot.png)
+![The ValeLoot editor beside the game, with the selected item's rule inspector open](docs/readme-image.png)
 
-*Left: the editor, and your rules as text. Middle: what those rules do to your bag. Right: the game's own
-inventory, with the same cells lit the same colours. `TOP2` is two top rolls, `AGI%` is a top-rolled Agi,
-`FAV` is a favourite, `CRIT` is high crit — all from the rules shown on the left.*
+*Left: the rules as text. Middle: the editor paints your live bag and explains why the selected item
+matched. Right: the game's own inventory, with the same cells lit the same colours. `TOP2` is two top
+rolls, `FAV` is a favourite, and `ATK` marks the matching attack rule — all from the rules shown on the left.*
 
 ---
 
@@ -159,7 +159,8 @@ Hide "vendor trash"
 | `Stat Agi >= 3` | that stat *prints* at least 3 on this item |
 | `StatMatches >= 3` | at least this many of the listed `Stat` conditions must match |
 | `AnyOf` with indented `Stat` lines | at least one stat inside that group must match |
-| `OverRoll` | a line above its normal maximum — only a Chaos widen does that |
+| `OverRoll` | a line above its normal maximum — the narrow over-roll form of Chaos |
+| `Chaos` / `NoChaos` | a Chaos-added extra substat **or** a roll past 100%, or neither |
 | `Refine >= 5` | refine level at least this |
 | `Favorite` | the star you put on it in game |
 | `AlwaysShow "…"` / `AlwaysHide "…"` | one item by name, ignoring rule order entirely |
@@ -287,7 +288,10 @@ already knows your bag, your rules and the game's item catalog.
   reorder and watch the colours move.
 - **Point at a rule** and the bag dims so you can see exactly which items it took — not "15 items", but
   *which* fifteen.
-- **Click an item** to build a rule from it, or to pin or silence that one item.
+- **Click an item** to open its match inspector: the winning result, every condition that passed or
+  failed, rule-from-item shortcuts, and the controls to pin or silence that one item.
+- Save warning-only **expectations** from the inspector. They rerun after edits and reordering, show
+  failures below the bag and in the Text tab, and never change the filter result or block Save.
 - Counts, share, and an honest note when a rule claims nothing because a rule above it got there first.
 - A **text tab**, for power users and for sharing a filter with someone else.
 

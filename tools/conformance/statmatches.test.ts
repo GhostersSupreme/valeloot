@@ -20,6 +20,8 @@ const item: OwnedGear = {
   topRolls: 0,
   highRolls: 0,
   avgRollPct: 70,
+  favorite: false,
+  hasChaos: false,
 };
 
 function condition(comparison: string): LootCondition {

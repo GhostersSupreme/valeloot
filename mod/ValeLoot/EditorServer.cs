@@ -887,12 +887,13 @@ internal static class EditorServer
         public readonly string Type;
         public readonly int Refine;
         public readonly bool Favorite;
+        public readonly bool HasChaos;
         /// <summary>Displayed-max line count, or -1 when the catalog could not answer.</summary>
         public readonly int TopRolls;
         public readonly BagLine[] Lines;
 
         public BagItem(string uid, string itemId, string name, string type, int refine, bool favorite,
-                       int topRolls, BagLine[] lines)
+                       bool hasChaos, int topRolls, BagLine[] lines)
         {
             Uid = uid;
             ItemId = itemId;
@@ -900,6 +901,7 @@ internal static class EditorServer
             Type = type;
             Refine = refine;
             Favorite = favorite;
+            HasChaos = hasChaos;
             TopRolls = topRolls;
             Lines = lines;
         }
@@ -915,7 +917,8 @@ internal static class EditorServer
             json.Append(",\"type\":");
             Str(json, Type);
             json.Append(",\"refine\":").Append(Refine.ToString(CultureInfo.InvariantCulture))
-                .Append(",\"favorite\":").Append(Favorite ? "true" : "false");
+                .Append(",\"favorite\":").Append(Favorite ? "true" : "false")
+                .Append(",\"hasChaos\":").Append(HasChaos ? "true" : "false");
 
             /*
              * HighRolls is the old threshold-based count, now named for its raw-roll semantics.

@@ -13,8 +13,8 @@
  */
 import { formatLootFilter, parseLootFilter } from '../../src/filter/loot-dsl.ts';
 import {
-  BUILTIN_LOOT_SOUNDS, LOOT_HIGHLIGHTS, STAT_ALIASES, matchLoot, matchesCondition,
-  normalizeSoundName,
+  BUILTIN_LOOT_SOUNDS, LOOT_HIGHLIGHTS, STAT_ALIASES, explainCondition, matchLoot,
+  matchesCondition, normalizeSoundName,
 } from '../../src/filter/loot-filter.ts';
 
 (globalThis as unknown as { VL: unknown }).VL = {
@@ -22,6 +22,7 @@ import {
   formatLootFilter,
   matchLoot,
   matchesCondition,
+  explainCondition,
   normalizeSoundName,
   LOOT_HIGHLIGHTS,
   BUILTIN_LOOT_SOUNDS,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { formatLootFilter, parseLootFilter } from '../../src/filter/loot-dsl.ts';
-import { matchesCondition } from '../../src/filter/loot-filter.ts';
+import { explainCondition, matchesCondition } from '../../src/filter/loot-filter.ts';
 import type { OwnedGear } from '../../src/filter/types.ts';
 
 const artifact: OwnedGear = {
@@ -18,6 +18,7 @@ const artifact: OwnedGear = {
   highRolls: 0,
   avgRollPct: 70,
   favorite: false,
+  hasChaos: false,
 };
 
 function parseWhen(...lines: string[]) {
@@ -57,5 +58,38 @@ describe('displayed and raw roll semantics', () => {
     expect(legacy.rules[0]!.when.maxAvgRollPct).toBe(explicit.rules[0]!.when.maxAvgRollPct);
     expect(formatLootFilter(legacy)).toContain('AvgRollPct');
     expect(formatLootFilter(legacy)).not.toContain('AvgRoll   ');
+  });
+
+  test('Chaos uses the item-level fact and reports stale snapshots unavailable', () => {
+    const when = parseWhen('Chaos true');
+    const chaos = { ...artifact, hasChaos: true };
+    expect(matchesCondition(chaos, when, {})).toBe(true);
+    expect(matchesCondition({ ...artifact, hasChaos: false }, when, {})).toBe(false);
+    const overRoll = {
+      ...artifact,
+      hasChaos: false,
+      lines: [{ ...artifact.lines[0]!, rollPct: 101, over: true }],
+    };
+    expect(matchesCondition(overRoll, when, {})).toBe(true);
+
+    const stale = explainCondition({ ...artifact, hasChaos: null }, when, {});
+    expect(stale.matches).toBe(false);
+    expect(stale.available).toBe(false);
+    expect(stale.checks).toContainEqual({
+      key: 'chaos',
+      label: 'Chaos',
+      expected: 'present',
+      actual: 'not recorded',
+      status: 'unavailable',
+    });
+  });
+
+  test('condition explanations preserve the matcher result and identify the failed check', () => {
+    const when = parseWhen('Type Artifact', 'Stat Vit >= 90%');
+    const explanation = explainCondition(artifact, when, { threshold: 90 });
+    expect(explanation.matches).toBe(matchesCondition(artifact, when, { threshold: 90 }));
+    expect(explanation.available).toBe(true);
+    expect(explanation.checks.find((check) => check.key === 'type')?.status).toBe('pass');
+    expect(explanation.checks.find((check) => check.key === 'stat-Vit')?.status).toBe('fail');
   });
 });
