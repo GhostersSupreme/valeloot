@@ -23,10 +23,10 @@ namespace ValeLoot;
 /// ## What this listener is, said plainly, because it is a socket
 ///
 /// It binds **127.0.0.1 only** — never `0.0.0.0`, never a LAN interface — so it is reachable from this
-/// machine and from nothing else. It answers exactly four routes: its own embedded editor page, a JSON
-/// snapshot of the player's own rules/bag/catalog, a save endpoint that writes the player's own rule
-/// file, and a one-field health probe. It carries **no game traffic**, hooks nothing on the game's
-/// network path, and contains **no packet capture** — there is no code here that could observe a game
+/// machine and from nothing else. It answers seven fixed routes: its own embedded editor page; JSON
+/// snapshots of the player's rules, bag, catalog, profiles, and session alert history; filter/profile
+/// writes; sound previews; and a one-field health probe. It carries **no game traffic**, hooks nothing
+/// on the game's network path, and contains **no packet capture** — there is no code here that could observe a game
 /// packet. The maintainer's audit greps for the game's transport library, its manager type and its raw
 /// send calls; those terms are deliberately not spelled anywhere in this folder, including in this
 /// comment, so that the audit's only possible hit would be real code. Nothing leaves the machine:
@@ -50,7 +50,7 @@ namespace ValeLoot;
 /// Everything it serves is captured on the MAIN thread, where the paint pass already gathered it for
 /// `valeloot-bag.txt` and `ItemCatalog`, and handed over as an immutable object graph that is swapped
 /// in by one reference assignment. The HTTP thread reads that one reference and serialises plain
-/// strings and ints. The only files it touches are the player's rule file and its own embedded page.
+/// strings and ints. Its writes are limited to the player's rule/profile files and its fallback page.
 ///
 /// ## Threading, in one paragraph
 ///
@@ -111,6 +111,7 @@ internal static class EditorServer
     /// of the synchronisation: a reader sees either the previous snapshot entire or the next one.
     /// </summary>
     private static volatile Snapshot _snapshot = Snapshot.Empty;
+    private static ProfileStore? _profiles;
 
     // ---- the main-thread tick, and the hotkey it reads --------------------------------------------
 
@@ -153,6 +154,7 @@ internal static class EditorServer
         // Cleared before the serve thread can read it, so a re-Install after Uninstall serves again.
         _stopping = false;
         _port = port is >= 1 and <= 65535 ? port : DefaultPort;
+        _profiles = new ProfileStore(FilterFile.Path);
         if (_port != port)
         {
             log($"editor Port {port} is not a port number; using {_port}.");
@@ -206,6 +208,7 @@ internal static class EditorServer
 
         Serving = false;
         _snapshot = Snapshot.Empty;
+        _profiles = null;
         _catalogGeneration = -1;
     }
 
@@ -378,9 +381,9 @@ internal static class EditorServer
      *    a foreign origin is refused outright rather than left to the browser to enforce — otherwise
      *    any tab the player has open could POST a new filter over theirs.
      *
-     * Then: exactly four routes, and 404 for everything else. There is no directory serving here and
-     * no path is ever joined to a filesystem root — the only file this can emit is its own embedded
-     * page, so there is no traversal to get wrong.
+     * Then: exactly seven routes, and 404 for everything else. There is no directory serving here and
+     * no route path is ever joined to a filesystem root. Profile names and sound names are separately
+     * validated before their own fixed directories are touched.
      */
     private static void Handle(HttpListenerContext context)
     {
@@ -473,9 +476,21 @@ internal static class EditorServer
                 SaveFilter(context);
                 return;
 
+            case "/api/profiles":
+                if (method == "GET") { SendProfiles(context); return; }
+                if (method == "POST") { ChangeProfile(context); return; }
+                MethodNotAllowed(context, "GET, POST");
+                return;
+
+            case "/api/history":
+                if (method == "GET") { SendHistory(context); return; }
+                if (method == "DELETE") { AlertHistory.Clear(); Send(context, 200, "application/json", Utf8("{\"ok\":true}")); return; }
+                MethodNotAllowed(context, "GET, DELETE");
+                return;
+
             default:
                 TrySend(context, 404, "application/json",
-                        Fail($"ValeLoot's editor serves /, /api/state, /api/filter, /api/sound and /api/health. No {route}."));
+                        Fail($"ValeLoot's editor serves /, /api/state, /api/filter, /api/profiles, /api/history, /api/sound and /api/health. No {route}."));
                 return;
         }
     }
@@ -551,6 +566,7 @@ internal static class EditorServer
         json.Append(",\"filterPath\":");
         Str(json, path);
         json.Append(",\"threshold\":").Append(snap.Threshold.ToString(CultureInfo.InvariantCulture));
+        AppendProfiles(json);
 
         json.Append(",\"catalog\":{\"ready\":").Append(snap.CatalogReady ? "true" : "false")
             .Append(",\"items\":").Append(snap.Items.Length.ToString(CultureInfo.InvariantCulture))
@@ -693,7 +709,7 @@ internal static class EditorServer
         }
 
         string path = FilterFile.Path;
-        if (path.Length == 0)
+        if (path.Length == 0 || _profiles is null)
         {
             TrySend(context, 503, "application/json",
                     Fail("ValeLoot has no filter file this session, so there is nowhere to save. See the BepInEx log."));
@@ -704,21 +720,15 @@ internal static class EditorServer
         // BOM on line 1 would make the first `Threshold` an unparsable token.
         int start = body.Length >= 3 && body[0] == 0xEF && body[1] == 0xBB && body[2] == 0xBF ? 3 : 0;
 
-        string temp = path + ".editor.tmp";
         try
         {
-            using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                file.Write(body, start, body.Length - start);
-            }
-            File.Move(temp, path, overwrite: true);
+            _profiles.SaveActive(body.AsSpan(start));
         }
         catch (Exception e)
         {
             // The real OS reason, verbatim, because the page shows this string to the player. "false"
             // on its own sends them to a forum; "Access to the path ... is denied" sends them to the
             // file's properties dialog.
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { /* best effort */ }
             TrySend(context, 500, "application/json", Fail($"could not write {path} — {e.Message}"));
             return;
         }
@@ -727,6 +737,102 @@ internal static class EditorServer
         int written = body.Length - start;
         Send(context, 200, "application/json",
              Utf8("{\"ok\":true,\"bytes\":" + written.ToString(CultureInfo.InvariantCulture) + "}"));
+    }
+
+    private static void AppendProfiles(StringBuilder json)
+    {
+        json.Append(",\"profiles\":[");
+        ProfileStore.Entry[] entries;
+        try { entries = _profiles?.List() ?? Array.Empty<ProfileStore.Entry>(); }
+        catch { entries = Array.Empty<ProfileStore.Entry>(); }
+        for (int i = 0; i < entries.Length; i++)
+        {
+            if (i > 0) json.Append(',');
+            json.Append("{\"name\":");
+            Str(json, entries[i].Name);
+            json.Append(",\"active\":").Append(entries[i].Active ? "true" : "false").Append('}');
+        }
+        json.Append(']');
+    }
+
+    private static void SendHistory(HttpListenerContext context)
+    {
+        AlertHistory.Entry[] entries = AlertHistory.Snapshot();
+        var json = new StringBuilder(entries.Length * 180 + 32);
+        json.Append("{\"ok\":true,\"entries\":[");
+        for (int i = entries.Length - 1; i >= 0; i--)
+        {
+            if (i < entries.Length - 1) json.Append(',');
+            AlertHistory.Entry entry = entries[i];
+            json.Append("{\"sequence\":").Append(entry.Sequence.ToString(CultureInfo.InvariantCulture)).Append(",\"at\":");
+            Str(json, entry.At.ToString("O", CultureInfo.InvariantCulture));
+            json.Append(",\"uid\":"); Str(json, entry.Uid);
+            json.Append(",\"name\":"); Str(json, entry.Name);
+            json.Append(",\"type\":"); Str(json, entry.Type);
+            json.Append(",\"quantity\":").Append(entry.Quantity.ToString(CultureInfo.InvariantCulture));
+            json.Append(",\"rule\":"); Str(json, entry.Rule);
+            json.Append(",\"tag\":"); Str(json, entry.Tag);
+            json.Append(",\"sound\":"); if (entry.Sound is null) json.Append("null"); else Str(json, entry.Sound);
+            json.Append(",\"soundWinner\":").Append(entry.SoundWinner ? "true" : "false")
+                .Append(",\"soundPlayed\":").Append(entry.SoundPlayed ? "true" : "false")
+                .Append(",\"note\":"); Str(json, entry.Note);
+            json.Append('}');
+        }
+        json.Append("]}");
+        Send(context, 200, "application/json", Utf8(json.ToString()));
+    }
+
+    private static void SendProfiles(HttpListenerContext context)
+    {
+        if (_profiles is null) { TrySend(context, 503, "application/json", Fail("profiles are unavailable")); return; }
+        var json = new StringBuilder(512);
+        json.Append("{\"ok\":true");
+        AppendProfiles(json);
+        json.Append('}');
+        Send(context, 200, "application/json", Utf8(json.ToString()));
+    }
+
+    private static void ChangeProfile(HttpListenerContext context)
+    {
+        if (_profiles is null) { TrySend(context, 503, "application/json", Fail("profiles are unavailable")); return; }
+        byte[] body;
+        try { body = ReadCapped(context.Request.InputStream); }
+        catch (Exception e) { TrySend(context, 400, "application/json", Fail($"could not read the request — {e.Message}")); return; }
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string part in Encoding.UTF8.GetString(body).Split('&'))
+        {
+            int at = part.IndexOf('=');
+            if (at < 0) continue;
+            fields[Uri.UnescapeDataString(part[..at].Replace('+', ' '))] =
+                Uri.UnescapeDataString(part[(at + 1)..].Replace('+', ' '));
+        }
+        fields.TryGetValue("action", out string? action);
+        fields.TryGetValue("name", out string? name);
+        fields.TryGetValue("source", out string? source);
+        try
+        {
+            switch (action)
+            {
+                case "activate": _profiles.Activate(name ?? ""); break;
+                case "create":
+                    fields.TryGetValue("text", out string? text);
+                    _profiles.Create(name ?? "", Encoding.UTF8.GetBytes(text ?? "")); break;
+                case "duplicate": _profiles.Duplicate(source ?? "", name ?? ""); break;
+                case "rename": _profiles.Rename(source ?? "", name ?? ""); break;
+                default: throw new InvalidDataException("unknown profile action");
+            }
+            string activeText = action == "activate" ? _profiles.Read(name ?? "") : File.ReadAllText(FilterFile.Path);
+            var json = new StringBuilder(1024);
+            json.Append("{\"ok\":true,\"filter\":");
+            Str(json, activeText);
+            AppendProfiles(json);
+            json.Append('}');
+            Send(context, 200, "application/json", Utf8(json.ToString()));
+        }
+        catch (Exception e)
+        {
+            TrySend(context, 400, "application/json", Fail(e.Message));
+        }
     }
 
     /// <summary>Read a request body, refusing at the cap rather than after it.</summary>

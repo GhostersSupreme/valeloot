@@ -80,6 +80,11 @@ header{display:flex;align-items:center;gap:14px;padding:0 14px;height:44px;flex:
 .files .no i{color:var(--warn)}
 .btn{background:transparent;color:var(--dim);border:1px solid var(--line2);border-radius:4px;
   padding:5px 11px;font-size:12px;transition:border-color .12s,color .12s}
+.profilebar{display:flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:5px;background:var(--sunk)}
+.profilebar label{font:10px var(--mono);text-transform:uppercase;letter-spacing:1px;color:var(--faint)}
+.profilebar select{max-width:180px;background:transparent;color:var(--ink);border:0;font:11.5px var(--mono)}
+.profilebar select:focus{outline:1px solid var(--gold-dim)}
+.profilebar option{background:var(--panel)}
 .btn:hover{border-color:var(--gold-dim);color:var(--ink)}
 .btn.save{border-color:var(--gold-dim);color:var(--gold);font-weight:600;letter-spacing:.3px}
 .btn.save:hover{background:rgba(200,169,97,.1)}
@@ -504,6 +509,12 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
 .conn i{flex:none;width:6px;height:6px;border-radius:50%;background:#5f8a6d;box-shadow:0 0 6px #5f8a6d}
 .conn b{font:11.5px var(--mono);font-weight:600;color:var(--ink)}
 .conn em{font-style:normal;color:var(--faint)}
+.history{position:fixed;z-index:55;right:16px;top:62px;width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 90px);
+  display:none;flex-direction:column;background:var(--panel);border:1px solid var(--line2);box-shadow:0 18px 60px #000;border-radius:7px}
+.history.on{display:flex}.historyhead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.historyhead b{font:12px var(--mono);text-transform:uppercase;letter-spacing:1px}.historylist{overflow:auto;padding:8px}
+.historyrow{padding:8px;border-bottom:1px solid var(--line);font-size:11.5px}.historyrow:last-child{border:0}
+.historyrow .meta{color:var(--faint);font:10.5px var(--mono);margin-top:3px}.historyrow .note{color:var(--dim)}
 .conn.lost{color:var(--warn);border-color:rgba(224,167,46,.4);background:rgba(224,167,46,.07)}
 .conn.lost i{background:var(--warn);box-shadow:0 0 6px var(--warn)}
 .conn.lost b{color:var(--warn)}
@@ -538,6 +549,15 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
 <header>
   <span class="brand">ValeLoot <em>filter</em></span>
   <div class="files" id="filestate"></div>
+  <div class="profilebar" id="profilebar" hidden>
+    <label>profile</label><select id="profile"></select>
+    <button class="btn tiny" id="profile-new">new</button>
+    <button class="btn tiny" id="profile-copy">duplicate</button>
+    <button class="btn tiny" id="profile-rename">rename</button>
+    <button class="btn tiny" id="profile-import">import</button>
+    <input type="file" id="profile-file" accept=".txt,text/plain" hidden>
+  </div>
+  <button class="btn tiny" id="history-open" hidden>alerts <span id="history-count"></span></button>
   <span class="grow"></span>
   <button class="btn tiny" id="reload" title="refresh all three files from the folder">refresh</button>
   <button class="btn tiny" id="download" title="save a copy of the filter text to your downloads">download</button>
@@ -596,6 +616,11 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
 -->
 <footer id="foot"><span id="footmsg">starting…</span><span class="path" id="footpath"></span><span
   class="conn" id="conn"></span></footer>
+<section class="history" id="history" aria-label="session pickup alert history">
+  <div class="historyhead"><b>session pickup alerts</b><span class="grow"></span>
+    <button class="btn tiny" id="history-clear">clear</button><button class="btn tiny" id="history-close">close</button></div>
+  <div class="historylist" id="history-list"></div>
+</section>
 <div id="note"></div>
 
 <script>
@@ -1551,6 +1576,7 @@ let selectedSnapshot = null;   // saved expectation item when it is no longer in
 let inspectedRule = null;      // block whose conditions the inspector explains
 const EXPECTATIONS_KEY = 'valeloot.filter-expectations.v1';
 let expectations = loadExpectations();
+let profiles = [];
 let focusRule = null;          // where the keyboard should land after a reorder
 let fileState = { filter: null, items: null, bag: null };
 
@@ -2944,6 +2970,8 @@ function downloadText() {
 const HEALTH_URL = 'api/health';
 const STATE_URL = 'api/state';
 const FILTER_URL = 'api/filter';
+const PROFILES_URL = 'api/profiles';
+const HISTORY_URL = 'api/history';
 
 /**
  * Which mode, decided ONCE, by asking rather than by guessing.
@@ -3032,6 +3060,10 @@ function applyState(state, keepText) {
   // The .wav files the mod can actually see. Null in file mode, where this page has no way to look
   // in the folder and the five synthesised built-ins are the honest best guess.
   served.sounds = Array.isArray(state.sounds) && state.sounds.length ? state.sounds.slice() : null;
+  profiles = Array.isArray(state.profiles) ? state.profiles.map((entry) => ({
+    name: String(entry.name || ''), active: entry.active === true,
+  })).filter((entry) => entry.name) : [];
+  renderProfiles();
   // Only ever from a real string, and adopted when the buffer is not yet the player's: `keepText` is
   // the refresh case, but a HELD save means no read has ever supplied the rules, so this one may.
   let released = false;
@@ -3046,6 +3078,8 @@ function applyState(state, keepText) {
   setBag(bagFromState(state));
   $('footpath').textContent = FILTER_FILE;
   renderConnection();
+  const activeProfile = profiles.find((entry) => entry.active);
+  if (activeProfile) $('footpath').textContent = FILTER_FILE + ' \u00b7 ' + activeProfile.name;
   return released;
 }
 
@@ -3204,6 +3238,60 @@ async function saveToMod() {
   }
 }
 
+function renderProfiles() {
+  const bar = $('profilebar');
+  bar.hidden = mode !== 'served' || !profiles.length;
+  if (bar.hidden) return;
+  $('profile').innerHTML = profiles.map((entry) => '<option' + (entry.active ? ' selected' : '') + '>'
+    + esc(entry.name) + '</option>').join('');
+}
+
+async function profileAction(action, name, source, text) {
+  const params = new URLSearchParams({ action, name: name || '' });
+  if (source) params.set('source', source);
+  if (text !== undefined) params.set('text', text);
+  const response = await fetch(PROFILES_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8' },
+    body: params.toString(),
+    cache: 'no-store',
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body || body.ok !== true) throw new Error(body && body.error ? body.error : response.statusText);
+  profiles = body.profiles || [];
+  if (typeof body.filter === 'string') loadFilterText(body.filter);
+  renderProfiles();
+  refresh();
+  const active = profiles.find((entry) => entry.active);
+  $('footpath').textContent = FILTER_FILE + (active ? ' \u00b7 ' + active.name : '');
+}
+
+function askedProfileName(promptText, initial) {
+  const name = prompt(promptText, initial || '');
+  return name === null ? null : name.trim();
+}
+
+async function loadHistory() {
+  if (mode !== 'served') return;
+  const response = await fetch(HISTORY_URL, { cache: 'no-store' });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body) throw new Error(body && body.error ? body.error : response.statusText);
+  const entries = Array.isArray(body.entries) ? body.entries : [];
+  $('history-count').textContent = entries.length ? entries.length : '';
+  $('history-list').innerHTML = entries.length ? entries.map((entry) => {
+    const when = new Date(entry.at);
+    return '<div class=\"historyrow\"><b>' + esc(entry.name || '(unnamed)') + '</b>'
+      + (Number(entry.quantity) > 1 ? ' \u00d7' + Number(entry.quantity) : '')
+      + ' <span class=\"note\">\u2014 ' + esc(entry.note || '') + '</span>'
+      + '<div class=\"meta\">' + esc(isNaN(when.getTime()) ? entry.at : when.toLocaleTimeString())
+      + ' \u00b7 ' + esc(entry.type || 'unknown type')
+      + (entry.rule ? ' \u00b7 ' + esc(entry.rule) : '')
+      + (entry.tag ? ' \u00b7 ' + esc(entry.tag) : '')
+      + (entry.sound ? ' \u00b7 sound ' + esc(entry.sound) : ' \u00b7 silent')
+      + '</div></div>';
+  }).join('') : '<p class=\"inspect-empty\">No pickups recorded this session.</p>';
+}
+
 /** The header's Save, routed by mode — and never labelled as more than the mode can do. */
 function saveFilter() {
   if (saveHeld) { say('Save is held: ' + saveHeld + '. Press refresh first.', true); return undefined; }
@@ -3253,6 +3341,8 @@ function applyModeChrome() {
   $('reload').title = servedNow
     ? 'pull a fresh bag and rules from the game — do this after looting'
     : 'refresh all three files from the folder';
+  $('history-open').hidden = !servedNow;
+  if (!servedNow) $('history').classList.remove('on');
 }
 
 async function enterServed(again) {
@@ -3260,6 +3350,7 @@ async function enterServed(again) {
   served.lost = false;
   $('gate').style.display = 'none';
   applyModeChrome();
+  renderProfiles();
   try {
     const released = applyState(await fetchState(), !!again);
     reportState(!again, released);
@@ -3892,6 +3983,51 @@ src.addEventListener('keydown', (event) => {
 $('save').addEventListener('click', saveFilter);
 $('download').addEventListener('click', downloadText);
 $('reload').addEventListener('click', reread);
+$('profile').addEventListener('change', async (event) => {
+  try { await profileAction('activate', event.target.value); say('Activated profile ' + event.target.value + '.'); }
+  catch (error) { say('Could not activate profile: ' + error.message, true); renderProfiles(); }
+});
+$('profile-new').addEventListener('click', async () => {
+  const name = askedProfileName('New profile name');
+  if (!name) return;
+  try { await profileAction('create', name, null, src.value); say('Created profile ' + name + '. Activate it from the profile list.'); }
+  catch (error) { say('Could not create profile: ' + error.message, true); }
+});
+$('profile-copy').addEventListener('click', async () => {
+  const active = profiles.find((entry) => entry.active);
+  const name = askedProfileName('Duplicate profile as', active ? active.name + ' copy' : '');
+  if (!name || !active) return;
+  try { await profileAction('duplicate', name, active.name); say('Duplicated ' + active.name + ' as ' + name + '.'); }
+  catch (error) { say('Could not duplicate profile: ' + error.message, true); }
+});
+$('profile-rename').addEventListener('click', async () => {
+  const active = profiles.find((entry) => entry.active);
+  const name = askedProfileName('Rename active profile', active ? active.name : '');
+  if (!name || !active || name === active.name) return;
+  try { await profileAction('rename', name, active.name); say('Renamed profile to ' + name + '.'); }
+  catch (error) { say('Could not rename profile: ' + error.message, true); }
+});
+$('profile-import').addEventListener('click', () => $('profile-file').click());
+$('profile-file').addEventListener('change', async (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const suggested = file.name.replace(/\\.txt$/i, '');
+  const name = askedProfileName('Import profile as', suggested);
+  if (!name) return;
+  try { await profileAction('create', name, null, await file.text()); say('Imported profile ' + name + '.'); }
+  catch (error) { say('Could not import profile: ' + error.message, true); }
+  finally { event.target.value = ''; }
+});
+$('history-open').addEventListener('click', async () => {
+  try { await loadHistory(); $('history').classList.add('on'); }
+  catch (error) { say('Could not read alert history: ' + error.message, true); }
+});
+$('history-close').addEventListener('click', () => $('history').classList.remove('on'));
+$('history-clear').addEventListener('click', async () => {
+  const response = await fetch(HISTORY_URL, { method: 'DELETE', cache: 'no-store' });
+  if (!response.ok) { say('Could not clear alert history.', true); return; }
+  await loadHistory();
+});
 
 /**
  * The find box. `renderGrid` alone, not the whole `refresh()` — the rules have not changed, so

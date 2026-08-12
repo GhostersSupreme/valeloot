@@ -238,6 +238,7 @@ internal static class InventoryWatch
     private static int _uidField = -1;
 
     private static readonly List<(string Uid, string Sound)> _pickups = new();
+    private static readonly List<AlertHistory.Arrival> _history = new();
     private static readonly LootFilter.ItemFacts _facts = new();
 
     /**
@@ -557,6 +558,7 @@ internal static class InventoryWatch
         Walks++;
         _scratch.Clear();
         _pickups.Clear();
+        _history.Clear();
 
         FilterFile.ReloadIfChanged();
         FilterParser.ParsedFilter filter = FilterFile.Current;
@@ -590,9 +592,10 @@ internal static class InventoryWatch
             return;
         }
 
-        if (_pickups.Count == 0) return;
-        Arrivals += _pickups.Count;
-        LootSound.Arrivals(_pickups);
+        if (_history.Count == 0) return;
+        Arrivals += _history.Count;
+        bool played = _pickups.Count > 0 && LootSound.Arrivals(_pickups);
+        AlertHistory.Record(_history, played);
     }
 
     private static void Collect(int bag, FilterParser.ParsedFilter filter)
@@ -633,10 +636,19 @@ internal static class InventoryWatch
 
             if (!ItemReader.ReadData(value, _facts)) continue;
             if (_bags[bag].Type.Length > 0) _facts.Type = _bags[bag].Type;
+            if (_facts.Name.Length == 0) _facts.Name = ItemCatalog.DisplayName(_facts.Id) ?? _facts.Id;
+            if (_facts.Type.Length == 0) _facts.Type = ItemCatalog.TypeName(_facts.Id) ?? "";
 
             InventoryPaint.Mark mark = InventoryPaint.Judge(_facts, filter);
-            // One entry per key, whatever the stack gained: ten copies of a card landing at once is
-            // still one thing that happened, and `LootSound` plays one sound per batch regardless.
+            int quantity = stack - had;
+            _history.Add(new AlertHistory.Arrival(
+                uid,
+                _facts.Name.Length > 0 ? _facts.Name : _facts.Id,
+                _facts.Type,
+                quantity,
+                mark.Rule,
+                mark.Label,
+                mark.Sound));
             if (mark.Sound is not null) _pickups.Add((uid, mark.Sound));
         }
     }

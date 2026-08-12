@@ -66,9 +66,9 @@ the whole truth about it, in one place, because it is the thing you would most w
 * It listens on 127.0.0.1:38512 and nothing else. Not 0.0.0.0, not your LAN address, not your Wi-Fi.
   127.0.0.1 is your own machine talking to itself; a request from anywhere else cannot arrive, and one
   that tries is refused before it is read.
-* It serves five routes: ValeLoot's embedded editor page, a state snapshot of YOUR rules, YOUR bag and
-  the game's item list, a save endpoint that writes YOUR rule file, a sound preview for your own .wav
-  files, and a health check so the page can verify that the mod is serving it.
+* It serves seven fixed routes: ValeLoot's embedded editor page, a state snapshot of YOUR rules, YOUR
+  bag and the game's item list, filter saving, local profile management, session alert history, sound
+  previews for your own .wav files, and a health check so the page can verify that the mod is serving it.
 * It carries no game traffic. It is not attached to the game's connection in any way, sees no game
   packet, and contains no packet capture. That distinction is the point: it is a local web page for a
   text file, not a window onto the game's network.
@@ -281,6 +281,15 @@ selected rule passed or failed, while keeping the rule-from-item, always-show an
 You can save a warning-only expectation for that item and rule/result. Expectations rerun after edits
 and reordering; a failure is shown below the bag and in the Text tab, but never changes the filter or
 blocks Save.
+
+Named filter profiles live only in BepInEx/config/valeloot-profiles/. The active profile is marked in
+the header. Create, duplicate, rename, import, activate or download them there. Pressing Save mirrors
+the active profile byte-for-byte to valeloot-filter.txt so hot reload keeps working. Hand edits to
+valeloot-filter.txt still hot reload into the game, but do not silently overwrite the stored profile.
+On the first upgraded run, an existing valeloot-filter.txt becomes the Default profile without being rewritten.
+The alerts button shows every pickup decision from this game session: item and quantity, matched
+rule/tag, silent outcomes, and which item supplied the one sound when several items arrived together.
+Clear it whenever you like. The list is bounded in memory and is never written to disk.
 
 The same editor, without the game running
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -566,6 +575,8 @@ BepInEx/config/com.savi.valeloot.cfg, written on first run with every option doc
                                    IT OPENS above.
   [Editor]    Port       38512     The loopback port. Change it if something else has that one.
   [Editor]    Hotkey       F8      Any Unity KeyCode name - F8, F9, Insert, Backslash, Home.
+  [Editor]    AlertHistoryCap 200  Maximum pickup decisions kept in memory for session alert history
+                                   (10-2000). Nothing persists between game sessions.
 
 Every one of these exists so that a piece which breaks on a game build newer than the mod can be
 turned off without waiting for a release. A marker that lands on the wrong object is worse than no
@@ -576,10 +587,10 @@ UNINSTALL
 ---------
 
 Delete BepInEx/plugins/ValeLoot/ - that takes the DLL, and the editor with it, since the editor is
-inside the DLL. Your filter file, the generated valeloot-items.txt and valeloot-bag.txt, the
-ValeLoot-editor.html fallback copy and your sounds stay in BepInEx/config/ unless you delete those
-too. Nothing is left anywhere else: no registry keys, no AppData, no service, and no firewall rule -
-the editor's port is loopback, which needs none.
+inside the DLL. Your filter file, named profiles in valeloot-profiles/, generated valeloot-items.txt
+and valeloot-bag.txt, the ValeLoot-editor.html fallback copy and your sounds stay in BepInEx/config/
+unless you delete those too. Nothing is left anywhere else: no registry keys, no AppData, no service,
+and no firewall rule - the editor's port is loopback, which needs none.
 
 
 LICENCE

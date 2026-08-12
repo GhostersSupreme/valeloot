@@ -209,14 +209,16 @@ internal static class LootSound
      * is exactly what is in the bag right now, so an item that leaves and comes back is an arrival
      * again. A second set in here could only ever disagree with that one.
      */
-    public static void Arrivals(List<(string Uid, string Sound)> pickups)
+    public static bool Arrivals(List<(string Uid, string Sound)> pickups)
     {
-        if (pickups.Count == 0) return;
+        if (pickups.Count == 0) return false;
 
         Announced += pickups.Count;
         (string uid, string sound) = pickups[0];
         LastUid = uid;
+        long before = Played;
         Play(sound);
+        return Played > before;
     }
 
     public static void Play(string name)

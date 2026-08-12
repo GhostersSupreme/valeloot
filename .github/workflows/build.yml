@@ -91,6 +91,12 @@ jobs:
       - name: Filter language conformance
         run: bun tools/conformance/run.ts
 
+      - name: Test profile behavior
+        run: dotnet run --project tools/profiles/Profiles.csproj -c Release
+
+      - name: Test alert history behavior
+        run: dotnet run --project tools/history/History.csproj -c Release
+
       - name: Build the plugin
         run: dotnet build mod/ValeLoot/ValeLoot.csproj -c Release
 

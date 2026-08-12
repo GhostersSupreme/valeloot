@@ -21,10 +21,10 @@ namespace ValeLoot;
 /// needs a listener, so this plugin HAS one, and the honest version of the old claim is:
 ///
 /// It binds **127.0.0.1 only** — never `0.0.0.0`, never a LAN interface — so nothing off this machine
-/// can reach it. It serves four things and no others: its own editor page (compiled into this DLL),
-/// a JSON snapshot of your own rules/bag/catalog, a save endpoint that writes your own rule file, and
-/// a health probe. It carries **no game traffic**, hooks nothing on the game's network path, and
-/// contains **no packet capture** — there is no code here that could observe a game packet. Nothing
+/// can reach it. It serves seven fixed routes and no others: its own editor page; JSON snapshots of
+/// your rules, bag, catalog, profiles, and session alert history; filter/profile writes; sound
+/// previews; and a health probe. It carries **no game traffic**, hooks nothing on the game's network
+/// path, and contains **no packet capture** — there is no code here that could observe a game packet. Nothing
 /// leaves your machine: there is no outbound request anywhere in the plugin. `Editor/Enabled = false`
 /// turns it off, and everything else keeps working. See <see cref="EditorServer"/>.
 ///
@@ -60,6 +60,7 @@ public sealed class Plugin : BasePlugin
     private ConfigEntry<bool>? _editor;
     private ConfigEntry<int>? _editorPort;
     private ConfigEntry<string>? _editorHotkey;
+    private ConfigEntry<int>? _alertHistoryCap;
     private ConfigEntry<bool>? _bagIndicator;
     private ConfigEntry<int>? _bagYellowPercent;
     private ConfigEntry<int>? _bagRedPercent;
@@ -75,7 +76,7 @@ public sealed class Plugin : BasePlugin
          * Tuning, in `BepInEx/config/com.savi.valeloot.cfg`. Every presentation feature has its own
          * switch because a player on a game build newer than this mod needs a way to turn a broken
          * piece off without waiting for a release — a marker that lands on the wrong object is worse
-         * than no marker. The three `[Editor]` entries exist because a listener nobody can switch off
+         * than no marker. The `[Editor]` entries exist because a listener nobody can switch off
          * is not something to install on someone else's machine.
          */
         _tint = Config.Bind("Highlight", "TintCell", true,
@@ -104,8 +105,11 @@ public sealed class Plugin : BasePlugin
         _editorHotkey = Config.Bind("Editor", "Hotkey", EditorServer.DefaultHotkey,
             "Key that opens the editor in your default browser. Any UnityEngine.KeyCode name: F8, F9, "
           + "Insert, Backslash, Home...");
+        _alertHistoryCap = Config.Bind("Editor", "AlertHistoryCap", 200,
+            "Maximum pickup decisions kept in memory for the editor's session alert history (10-2000). Nothing persists.");
 
         LootSound.Enabled = _sound.Value;
+        AlertHistory.Configure(_alertHistoryCap.Value);
         TooltipInject.Enabled = _note.Value;
 
         /**

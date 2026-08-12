@@ -294,16 +294,23 @@ already knows your bag, your rules and the game's item catalog.
   failures below the bag and in the Text tab, and never change the filter result or block Save.
 - Counts, share, and an honest note when a rule claims nothing because a rule above it got there first.
 - A **text tab**, for power users and for sharing a filter with someone else.
+- **Named filter profiles** kept entirely in `BepInEx/config/valeloot-profiles/`. The active profile is
+  marked in the header; create, duplicate, rename, import, activate, and download profiles without
+  changing the filter language. On upgrade, an existing `valeloot-filter.txt` becomes `Default`
+  byte-for-byte without rewriting the live file or any profile already there.
+- **Session pickup alerts** list every pickup decision, including stack quantity, matched rule/tag,
+  silent outcomes, and which item won a simultaneous batch's single sound. Clear it from the panel;
+  it is bounded in memory and never persisted.
 
-Saving writes `valeloot-filter.txt` and your bag recolours on the next inventory redraw.
+Saving writes the active profile through `valeloot-filter.txt`; your bag recolours on the next inventory redraw.
 
 ### The one port it opens
 
 The editor is served from the mod over loopback, on `http://127.0.0.1:38512/`.
 
 - It binds **`127.0.0.1` only**. It is reachable from this machine and from nothing else.
-- It serves five routes: its embedded editor page, a state snapshot of your rules/bag/catalog, a filter
-  save endpoint, a sound preview for your own `.wav` files, and a health check.
+- It serves seven fixed routes: its embedded editor page, a state snapshot, filter saving, local profile
+  management, session alert history, sound previews for your own `.wav` files, and a health check.
 - It carries **no game traffic**, and there is no network hook anywhere in the plugin.
 - Every request stays on `127.0.0.1` between the game and your browser. There is no outbound communication.
 - Turn it off with `Enabled = false` under `[Editor]` in `BepInEx/config/com.savi.valeloot.cfg`. No port is
@@ -328,6 +335,7 @@ The editor is served from the mod over loopback, on `http://127.0.0.1:38512/`.
 | `Editor / Enabled` | `true` | The loopback editor server. |
 | `Editor / Port` | `38512` | Its port. |
 | `Editor / Hotkey` | `F8` | Any `UnityEngine.KeyCode` name. |
+| `Editor / AlertHistoryCap` | `200` | Maximum pickup decisions kept in memory for session alert history, from `10` to `2000`. |
 
 Sounds are ordinary `.wav` files in `BepInEx/config/valeloot-sounds/`. Five are written on first run so a
 fresh install has something to play; overwrite `chime.wav` with anything you like and your rules do not

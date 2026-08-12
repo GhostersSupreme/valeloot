@@ -53,6 +53,16 @@ const steps: readonly Step[] = [
     meaning: 'the mod and the editor read the same filter file differently',
   },
   {
+    name: 'profile behavior',
+    argv: ['dotnet', 'run', '--project', 'tools/profiles/Profiles.csproj', '-c', 'Release'],
+    meaning: 'profile migration, activation, or exact-text preservation is broken',
+  },
+  {
+    name: 'alert history behavior',
+    argv: ['dotnet', 'run', '--project', 'tools/history/History.csproj', '-c', 'Release'],
+    meaning: 'session alert batching, explanations, or bounds are broken',
+  },
+  {
     name: 'plugin builds',
     argv: ['dotnet', 'build', 'mod/ValeLoot/ValeLoot.csproj', '-c', 'Release', '--nologo', '-v', 'quiet'],
     meaning: 'the mod does not compile',

@@ -550,20 +550,21 @@ internal static class InventoryPaint
      */
     internal static Mark Judge(LootFilter.ItemFacts facts, FilterParser.ParsedFilter filter)
     {
-        if (Named(facts, filter.Muted)) return default;
+        if (Named(facts, filter.Muted)) return new Mark(
+            0, LootFilter.BackgroundBorder, true, (0, 0, 0), "", "", "always hidden", null);
         if (Named(facts, filter.Pinned)) return PinnedMark;
 
         LootFilter.LootRule? rule = LootFilter.Match(facts, filter.Rules, filter.Threshold);
-        if (rule is null || rule.Mute) return default;
+        if (rule is null) return default;
         return new Mark(
-            rule.Level,
+            rule.Mute ? 0 : rule.Level,
             rule.Background,
             rule.Border,
             (rule.R, rule.G, rule.B),
             rule.Color,
-            rule.Label.Length > 0 ? rule.Label : "",
+            rule.Mute ? "" : rule.Label.Length > 0 ? rule.Label : "",
             $"rule \"{rule.Name}\"",
-            rule.Sound);
+            rule.Mute ? null : rule.Sound);
     }
 
     /**
