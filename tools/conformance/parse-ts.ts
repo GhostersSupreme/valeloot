@@ -35,6 +35,7 @@ function rule(r: LootRule): string {
   const w = r.when ?? {};
   const stat = (s: NonNullable<typeof w.stats>[number]): string =>
     `{"stat": ${str(s.stat)}, "minRollPct": ${num(s.minRollPct)}, "minValue": ${num(s.minValue)}}`;
+  const requiredStats = (w.requiredStats ?? []).map(stat);
   const stats = (w.stats ?? []).map(stat);
   const anyOfStats = (w.anyOfStats ?? [])
     .map((group) => `[${group.map(stat).join(', ')}]`);
@@ -68,6 +69,7 @@ function rule(r: LootRule): string {
     `, "hasChaos": ${bool(w.hasChaos)}` +
     `, "favorite": ${bool(w.favorite)}` +
     `, "overRoll": ${bool(w.overRoll)}` +
+    `, "requiredStats": [${requiredStats.join(', ')}]` +
     `, "stats": [${stats.join(', ')}]` +
     `, "anyOfStats": [${anyOfStats.join(', ')}]}}`
   );

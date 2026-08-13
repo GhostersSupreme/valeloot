@@ -211,14 +211,35 @@ internal static class ItemReader
         if (!Installed || cellObject == IntPtr.Zero) { facts.Reset(); return false; }
 
         IntPtr data = Marshal.ReadIntPtr(cellObject, _cellData);
-        // A pooled cell keeps its old `Data` after `Clear()`, so an empty slot is not necessarily null.
-        // Callers only reach here for cells the game's own uid map points at, which is what makes the
-        // pointer trustworthy — `ReadData`'s null check is for the torn moment during a repaint.
+        // A pooled cell keeps its old `Data` after `Clear()`. This path is valid only for tabs whose
+        // Draw overload writes Data; data-less tabs must use ReadPresentation instead.
         if (!ReadData(data, facts)) return false;
 
         facts.Name = ReadText(cellObject, _cellName);
         facts.Type = ReadText(cellObject, _cellType);
         return true;
+    }
+
+    /**
+     * Fill facts owned by the current cell without touching its pooled `Data` field.
+     *
+     * Grimoire cells are rendered from config records rather than inventory-item data. Their Draw
+     * overload updates the visible text but never writes `UIInventoryItem.Data`, and Clear does not
+     * null that field. The dictionary key is therefore the stable id; refine, flags and stats remain
+     * at the reset defaults because Grimoires have none.
+     */
+    public static bool ReadPresentation(
+        IntPtr cellObject,
+        string id,
+        LootFilter.ItemFacts facts)
+    {
+        facts.Reset();
+        if (!Installed || cellObject == IntPtr.Zero) return false;
+
+        facts.Id = id;
+        facts.Name = ReadText(cellObject, _cellName);
+        facts.Type = ReadText(cellObject, _cellType);
+        return facts.Id.Length > 0 || facts.Name.Length > 0 || facts.Type.Length > 0;
     }
 
     /**

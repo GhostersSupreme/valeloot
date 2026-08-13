@@ -82,6 +82,7 @@ internal static class Program
         }
 
         VerifyStatMatches();
+        VerifyRequireStat();
         VerifyAnyOf();
         VerifyDisplayedStatRules();
         VerifyStatAliases();
@@ -177,6 +178,40 @@ internal static class Program
         AssertMatch(false, item, stats, null, 1, "at most one of three");
         AssertMatch(true, item, stats, 2, 2, "exactly two of three");
         AssertMatch(false, item, stats, 1, 1, "exactly one of three");
+    }
+
+    /// <summary>Required stats are mandatory and are excluded from the StatMatches count.</summary>
+    private static void VerifyRequireStat()
+    {
+        FilterParser.ParsedFilter parsed = FilterParser.Parse(
+            """
+            Show "Farming Target"
+                RequireStat Agi >= 1%
+                Stat DoubleAttack >= 1%
+                Stat DamageMagic >= 1%
+                Stat MatkMult >= 1%
+                Stat Matk >= 1%
+                StatMatches >= 2
+            """);
+        if (parsed.Errors.Length != 0 || parsed.Rules.Length != 1)
+            throw new InvalidOperationException("could not parse the RequireStat regression rule");
+
+        var valid = new LootFilter.ItemFacts();
+        valid.AddStat("Agi", 0, 80, "");
+        valid.AddStat("DoubleAttack", 0, 80, "");
+        valid.AddStat("Matk", 0, 80, "");
+        AssertCondition(true, valid, parsed.Rules[0].When, "required AGI plus two candidates");
+
+        var oneCandidate = new LootFilter.ItemFacts();
+        oneCandidate.AddStat("Agi", 0, 80, "");
+        oneCandidate.AddStat("DoubleAttack", 0, 80, "");
+        AssertCondition(false, oneCandidate, parsed.Rules[0].When, "required AGI plus one candidate");
+
+        var noRequiredStat = new LootFilter.ItemFacts();
+        noRequiredStat.AddStat("DoubleAttack", 0, 80, "");
+        noRequiredStat.AddStat("DamageMagic", 0, 80, "");
+        noRequiredStat.AddStat("Matk", 0, 80, "");
+        AssertCondition(false, noRequiredStat, parsed.Rules[0].When, "three candidates without required AGI");
     }
 
     /// <summary>Friendly spellings canonicalize; collision exclusions stay distinct live stats.</summary>
@@ -408,6 +443,22 @@ internal static class Program
             .Append(", \"hasChaos\": ").Append(Bool(when.HasChaos))
             .Append(", \"favorite\": ").Append(Bool(when.Favorite))
             .Append(", \"overRoll\": ").Append(Bool(when.OverRoll));
+
+        json.Append(", \"requiredStats\": [");
+        if (when.RequiredStats is not null)
+        {
+            for (int i = 0; i < when.RequiredStats.Length; i++)
+            {
+                if (i > 0) json.Append(", ");
+                LootFilter.StatCondition stat = when.RequiredStats[i];
+                json.Append("{\"stat\": ");
+                Str(json, stat.Stat);
+                json.Append(", \"minRollPct\": ").Append(Int(stat.MinRollPct))
+                    .Append(", \"minValue\": ").Append(Int(stat.MinValue))
+                    .Append('}');
+            }
+        }
+        json.Append(']');
 
         json.Append(", \"stats\": [");
         if (when.Stats is not null)

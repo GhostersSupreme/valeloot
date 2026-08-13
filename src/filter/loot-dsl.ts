@@ -262,6 +262,7 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
   const errors: FilterError[] = [];
   const when: LootCondition = {};
   const stats: StatCondition[] = [];
+  const requiredStats: StatCondition[] = [];
   const anyOfStats: StatCondition[][] = [];
   let color = block.kind === 'hide' ? '#6b7a73' : '#4ade80';
   let label: string | undefined;
@@ -372,6 +373,11 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
       case 'stat': {
         const condition = parseStat(line, text, remainder);
         if (condition) stats.push(condition);
+        break;
+      }
+      case 'requirestat': {
+        const condition = parseStat(line, text, remainder);
+        if (condition) requiredStats.push(condition);
         break;
       }
       case 'anystat':
@@ -529,6 +535,7 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
     }
   }
 
+  if (requiredStats.length) when.requiredStats = requiredStats;
   if (stats.length) when.stats = stats;
   if (anyOfStats.length) when.anyOfStats = anyOfStats;
 
@@ -621,6 +628,11 @@ export function formatLootFilter(parsed: Pick<ParsedFilter, 'rules' | 'overrides
     const w = rule.when;
     if (w.names?.length) out.push(`    Name      ${w.names.map((n) => `"${n}"`).join(', ')}`);
     if (w.slotTypes?.length) out.push(`    Type      ${w.slotTypes.join(', ')}`);
+    for (const stat of w.requiredStats ?? []) {
+      if (stat.minRollPct !== undefined) out.push(`    RequireStat ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
+      else if (stat.minValue !== undefined) out.push(`    RequireStat ${stat.stat} >= ${stat.minValue}`);
+      else out.push(`    RequireStat ${stat.stat} >= 0`);
+    }
     for (const stat of w.stats ?? []) {
       if (stat.minRollPct !== undefined) out.push(`    Stat      ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
       else if (stat.minValue !== undefined) out.push(`    Stat      ${stat.stat} >= ${stat.minValue}`);

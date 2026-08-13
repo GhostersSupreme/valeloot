@@ -14,7 +14,7 @@
       changed tree can build a zip with the same filename as the published release, and nothing
       anywhere would notice that the bytes differ.
     -->
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <!-- BepInEx BE packages are prerelease by definition. -->
     <NoWarn>$(NoWarn);NU5104</NoWarn>
     <!--

@@ -359,6 +359,7 @@ internal static class FilterParser
     {
         var when = new LootFilter.LootCondition();
         var stats = new List<LootFilter.StatCondition>();
+        var requiredStats = new List<LootFilter.StatCondition>();
         var anyOfStats = new List<LootFilter.StatCondition[]>();
         string color = block.Hide ? "#6b7a73" : "#4ade80";
         string label = "";
@@ -443,6 +444,13 @@ internal static class FilterParser
                 {
                     LootFilter.StatCondition? condition = ParseStat(line, text, remainder, errors);
                     if (condition is not null) stats.Add(condition);
+                    break;
+                }
+
+                case "requirestat":
+                {
+                    LootFilter.StatCondition? condition = ParseStat(line, text, remainder, errors);
+                    if (condition is not null) requiredStats.Add(condition);
                     break;
                 }
 
@@ -669,6 +677,7 @@ internal static class FilterParser
             }
         }
 
+        if (requiredStats.Count > 0) when.RequiredStats = requiredStats.ToArray();
         if (stats.Count > 0) when.Stats = stats.ToArray();
         if (anyOfStats.Count > 0) when.AnyOfStats = anyOfStats.ToArray();
 

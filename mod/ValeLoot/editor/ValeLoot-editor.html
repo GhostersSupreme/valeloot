@@ -471,11 +471,12 @@ h3.sec{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(
   box-shadow:0 14px 32px rgba(0,0,0,.65);max-height:204px;overflow:auto;min-width:0;padding:3px}
 .ac div{padding:4px 8px;border-radius:3px;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12px}
 .ac div.on{background:rgba(200,169,97,.14)}
-.ac b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink);
-  font-family:var(--mono);font-size:11.5px}
-.ac .help{min-width:0;color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac b{min-width:0;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;
+  color:var(--ink);font-family:var(--mono);font-size:11.5px;flex:0 0 auto}
+.ac .desc{min-width:0;color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;flex:1 100 0}
 .ac .meta{margin-left:auto;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:var(--gold-dim);font:10.5px var(--mono);flex:none}
+  color:var(--gold-dim);font:10.5px var(--mono);flex:0 1 auto}
 .txtfoot{flex:none;display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--line);
   font-size:11.5px;color:var(--faint)}
 
@@ -716,6 +717,12 @@ function matchesCondition(item, when, context) {
     if (over !== when.overRoll)
       return false;
   }
+  if (when.requiredStats?.length) {
+    for (const condition of when.requiredStats) {
+      if (!matchesStat(item, condition))
+        return false;
+    }
+  }
   const boundedStatMatches = when.minStatMatches !== undefined || when.maxStatMatches !== undefined;
   if (when.stats?.length) {
     const mode = when.statMode ?? "all";
@@ -824,6 +831,16 @@ function explainCondition(item, when, context) {
   if (when.overRoll !== undefined) {
     const over = item.lines.some((line) => line.over);
     add("overroll", "Over-roll", when.overRoll ? "present" : "absent", over ? "present" : "absent", over === when.overRoll);
+  }
+  for (const condition of when.requiredStats ?? []) {
+    const pass = matchesStat(item, condition);
+    const bounds = [
+      condition.minRollPct === undefined ? "" : `${condition.minRollPct}% roll`,
+      condition.minValue === undefined ? "" : `value ${condition.minValue}`
+    ].filter(Boolean).join(", ") || "present";
+    const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === canonicalStatName(condition.stat).toLowerCase());
+    const actual = !line ? "missing" : `${line.base}${line.rollPct === null ? "" : ` · ${Math.round(line.rollPct)}%`}`;
+    add(`required-stat-${condition.stat}`, `Required ${condition.stat}`, bounds, actual, pass);
   }
   const boundedStats = when.minStatMatches !== undefined || when.maxStatMatches !== undefined;
   let statHits = 0;
@@ -1001,6 +1018,7 @@ function parseRuleBlock(block, index) {
   const errors = [];
   const when = {};
   const stats = [];
+  const requiredStats = [];
   const anyOfStats = [];
   let color = block.kind === "hide" ? "#6b7a73" : "#4ade80";
   let label;
@@ -1100,6 +1118,12 @@ function parseRuleBlock(block, index) {
         const condition = parseStat(line, text, remainder);
         if (condition)
           stats.push(condition);
+        break;
+      }
+      case "requirestat": {
+        const condition = parseStat(line, text, remainder);
+        if (condition)
+          requiredStats.push(condition);
         break;
       }
       case "anystat":
@@ -1281,6 +1305,8 @@ function parseRuleBlock(block, index) {
         errors.push({ line, text, message: `unknown condition "${head}"` });
     }
   }
+  if (requiredStats.length)
+    when.requiredStats = requiredStats;
   if (stats.length)
     when.stats = stats;
   if (anyOfStats.length)
@@ -1354,6 +1380,14 @@ function formatLootFilter(parsed) {
       out.push(`    Name      ${w.names.map((n) => `"${n}"`).join(", ")}`);
     if (w.slotTypes?.length)
       out.push(`    Type      ${w.slotTypes.join(", ")}`);
+    for (const stat of w.requiredStats ?? []) {
+      if (stat.minRollPct !== undefined)
+        out.push(`    RequireStat ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
+      else if (stat.minValue !== undefined)
+        out.push(`    RequireStat ${stat.stat} >= ${stat.minValue}`);
+      else
+        out.push(`    RequireStat ${stat.stat} >= 0`);
+    }
     for (const stat of w.stats ?? []) {
       if (stat.minRollPct !== undefined)
         out.push(`    Stat      ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
@@ -1503,6 +1537,7 @@ const CONDITIONS = [
   ['Name', 'name(s) or id(s), comma separated — any one matching is enough'],
   ['Type', 'item type(s), comma separated'],
   ['Stat', 'Agi >= 3 (the printed value) or Agi >= 90% (roll quality)'],
+  ['RequireStat', 'mandatory stat; excluded from StatMatches, AnyStat, and AllStats'],
   ['StatMatches', 'how many listed Stat conditions must match, e.g. >= 3'],
   ['AnyOf', 'one indented Stat condition must match; each group is required'],
   ['AvgRollPct', 'average hidden roll percentage, e.g. < 35'],
@@ -2618,7 +2653,9 @@ function contextAt() {
   if (!indented) return null;
   if (words.length <= 1) return Object.assign({ kind: 'cond' }, tail(words[0]));
   if (first === 'name') return itemContext(line, lineStart);
-  if (first === 'stat' && words.length === 2) return Object.assign({ kind: 'stat' }, tail(words[1]));
+  if ((first === 'stat' || first === 'requirestat') && words.length === 2) {
+    return Object.assign({ kind: 'stat' }, tail(words[1]));
+  }
   if (first === 'type') return Object.assign({ kind: 'type' }, tail(words[words.length - 1]));
   if (first === 'highlight' && words.length === 2) return Object.assign({ kind: 'level' }, tail(words[1]));
   if (first === 'background' && words.length === 2) return Object.assign({ kind: 'background' }, tail(words[1]));
@@ -2705,7 +2742,7 @@ function showAC(force) {
   box.id = 'ac';
   box.innerHTML = list.map((item, i) => '<div class="' + (i === 0 ? 'on' : '') + '" data-i="' + i + '">'
     + '<b>' + esc(item.text) + '</b>'
-    + (item.help ? '<span class="help">' + esc(item.help) + '</span>' : '')
+    + (item.help ? '<span class="desc">' + esc(item.help) + '</span>' : '')
     + (item.meta ? '<span class="meta">' + esc(item.meta) + '</span>' : '') + '</div>').join('');
   document.querySelector('.edit').appendChild(box);
   const upto = src.value.slice(0, src.selectionStart).split('\n');

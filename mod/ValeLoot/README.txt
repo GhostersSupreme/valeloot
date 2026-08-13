@@ -120,7 +120,7 @@ INSTALL
 Unzip, launch, press F8. There are two downloads and the first one is almost certainly the one you
 want.
 
-ValeLoot-0.4.0-with-BepInEx.zip - TAKE THIS ONE
+ValeLoot-0.5.0-with-BepInEx.zip - TAKE THIS ONE
 
   1. Unzip it into your SpiritVale folder - the folder holding SpiritVale.exe.
   2. Start the game. THE FIRST START TAKES A FEW MINUTES - see below.
@@ -146,7 +146,7 @@ BepInEx is included UNMODIFIED, under its own LGPL-2.1 licence. Its licence text
 source are in NOTICE.txt at the root of the zip, alongside BepInEx-LICENSE.txt. ValeLoot's own licence
 is at the bottom of this file and covers only ValeLoot.
 
-ValeLoot-0.4.0.zip - THE PLUGIN ON ITS OWN
+ValeLoot-0.5.0.zip - THE PLUGIN ON ITS OWN
 
 For someone who already runs BepInEx 6 IL2CPP (the BLEEDING-EDGE "be" build). It contains the DLL and
 this README and nothing else. Unzip it into the same game folder - the paths inside are already
@@ -360,6 +360,7 @@ Conditions (all optional, and all must hold for the block to match):
                             whole non-equipment kinds named by ValeLoot
     Stat Agi >= 90%         that substat line rolled in the top 10% of its range
     Stat Agi >= 3           that substat PRINTS at least +3 on this item
+    RequireStat Agi >= 3    mandatory; never counted by StatMatches or changed by AnyStat
     StatMatches >= 3        at least three of the listed Stat conditions must match
     AnyStat                 one Stat line is enough (default: every Stat line must match)
     AnyOf                  one of its more-indented Stat lines must match; the group itself is required
@@ -384,15 +385,30 @@ Autocomplete prefers the friendly spelling and shows the internal name beside it
 valeloot-items.txt lists both. Short labels such as Atk, Hp and Def are not aliases for AtkMult,
 HpMult or DefMult: those are separate live stats.
 
+Required AGI plus any two of four farming stats:
+
+    Show "Farming Target"
+        Name          "Flame Tongue Kunai"
+        RequireStat   Agi >= 3
+        Stat          DoubleAttack >= 20
+        Stat          DamageMagic >= 5
+        Stat          MatkMult >= 5
+        Stat          Matk >= 5
+        StatMatches   >= 2
+
+RequireStat lines are always required and are not part of the StatMatches count. Multiple
+RequireStat lines are ANDed.
+
 Required AGI plus either Atk% or flat Atk:
 
-    Stat Agi >= 1
+    RequireStat Agi >= 1
     AnyOf
         Stat AtkMult >= 1
         Stat Atk     >= 1
 
 AnyOf currently accepts only Stat lines. Its child lines must be indented farther than AnyOf. Each
-AnyOf group is required, while the Stat lines inside one group are alternatives.
+AnyOf group is required, while the Stat lines inside one group are alternatives. StatMatches and
+AnyStat aggregate only ordinary Stat lines, not RequireStat lines or AnyOf children.
 
 Decorations, on Show blocks only:
 

@@ -83,6 +83,52 @@ describe('StatMatches', () => {
   });
 });
 
+describe('RequireStat', () => {
+  const text = [
+    'Show "Farming Target"',
+    '    Name "Flame Tongue Kunai"',
+    '    RequireStat Agi >= 3',
+    '    Stat DoubleAttack >= 20',
+    '    Stat DamageMagic >= 5',
+    '    Stat MatkMult >= 5',
+    '    Stat Matk >= 5',
+    '    StatMatches >= 2',
+  ].join('\n');
+
+  const farmingItem = (...stats: Array<[string, number]>): OwnedGear => ({
+    ...item,
+    name: 'Flame Tongue Kunai',
+    lines: stats.map(([stat, base]) => ({
+      stat,
+      base,
+      rollPct: 50,
+      isChaos: false,
+      over: false,
+    })),
+  });
+
+  test.each([
+    [[['Agi', 3], ['DoubleAttack', 20], ['Matk', 5]], true],
+    [[['Agi', 3], ['DoubleAttack', 20]], false],
+    [[['DoubleAttack', 20], ['DamageMagic', 5], ['Matk', 5]], false],
+    [[['Agi', 2], ['DoubleAttack', 20], ['DamageMagic', 5]], false],
+  ] as const)('requires AGI outside the candidate count: %j', (stats, expected) => {
+    const parsed = parseLootFilter(text);
+    expect(parsed.errors).toEqual([]);
+    expect(matchesCondition(farmingItem(...stats), parsed.rules[0]!.when, {})).toBe(expected);
+  });
+
+  test('round-trips required stats without turning them into candidates', () => {
+    const parsed = parseLootFilter(text);
+    const formatted = formatLootFilter(parsed);
+    const reparsed = parseLootFilter(formatted);
+
+    expect(reparsed.errors).toEqual([]);
+    expect(reparsed.rules[0]!.when.requiredStats).toEqual(parsed.rules[0]!.when.requiredStats);
+    expect(reparsed.rules[0]!.when.stats).toEqual(parsed.rules[0]!.when.stats);
+  });
+});
+
 describe('AnyOf', () => {
   const text = [
     'Show "AGI plus attack"',

@@ -24,8 +24,8 @@ namespace ValeLoot;
 /// `HoverInfoHandler` is a `MonoBehaviour` implementing `IPointerEnterHandler`, carrying
 /// `OnHoverEnter`/`OnHoverExit` (`Action&lt;PointerEventData&gt;`) that its OWNER assigns. Nothing calls
 /// `Begin` in code — it is wired in the prefab — so the panel cannot be found by cross-reference. What CAN
-/// be relied on is the object graph: the handler sits on the same GameObject as the `UIInventoryItem`, so
-/// the hovered cell (and through `Data`, the item's uid) is one `GetComponent` away.
+/// be relied on is the object graph: the handler sits on the same GameObject as the `UIInventoryItem`,
+/// so the hovered cell — the same identity the paint pass records — is one `GetComponent` away.
 ///
 /// ## Not finding the panel at all
 ///
@@ -75,9 +75,7 @@ internal static class TooltipInject
     private static ActiveFn? _activeInHierarchy;
     private static IntPtr _textType;
     private static IntPtr _cellType;
-    private static IntPtr _refinableType;
     private static int _dataFieldOffset = -1;
-    private static int _uidFieldOffset = -1;
     private static Action<string>? _log;
 
 
@@ -119,7 +117,6 @@ internal static class TooltipInject
 
         IntPtr handler = Il2CppMeta.FindClass("", "HoverInfoHandler", HookCensus.GameAssemblies);
         IntPtr cell = Il2CppMeta.FindClass("", "UIInventoryItem", HookCensus.GameAssemblies);
-        IntPtr refinable = Il2CppMeta.FindClass("", "RefinableItemData", HookCensus.GameAssemblies);
         IntPtr text = Il2CppMeta.FindClass("TMPro", "TMP_Text", "Unity.TextMeshPro.dll", "TextMeshPro.dll");
         IntPtr component = Il2CppMeta.FindClass("UnityEngine", "Component", "UnityEngine.CoreModule.dll");
         IntPtr transform = Il2CppMeta.FindClass("UnityEngine", "Transform", "UnityEngine.CoreModule.dll");
@@ -166,16 +163,13 @@ internal static class TooltipInject
         _activeInHierarchy = Marshal.GetDelegateForFunctionPointer<ActiveFn>(active.NativePtr);
         _textType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(text));
         _cellType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(cell));
-        _refinableType = refinable;
         _dataFieldOffset = Il2CppMeta.FieldOffset(cell, "Data");
-        // `UID` is an auto-property, so the FIELD is `<UID>k__BackingField` — asking for "UID" returns -1
-        // and reads exactly like "the game renamed it". Declared on RefinableItemData, which both
-        // EquipData and ArtifactData derive, so one offset covers equipment and artifacts.
-        _uidFieldOffset = Il2CppMeta.PropertyFieldOffset(refinable, "UID");
+        // Data remains necessary for cooperative tooltip providers. The filter's own verdict is keyed
+        // by cell and does not depend on this pointer.
 
-        if (_dataFieldOffset < 0 || _uidFieldOffset < 0)
+        if (_dataFieldOffset < 0)
         {
-            log($"tooltip inject NOT ready: Data at 0x{_dataFieldOffset:x}, UID at 0x{_uidFieldOffset:x}");
+            log($"tooltip inject NOT ready: Data at 0x{_dataFieldOffset:x}");
             return false;
         }
 
@@ -195,7 +189,7 @@ internal static class TooltipInject
             _setTextOriginal = setOriginal;
 
             Installed = true;
-            log($"tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x{_dataFieldOffset:x}, UID 0x{_uidFieldOffset:x}, floors {MinTooltipChars}/{MinExternalTooltipChars} chars)");
+            log($"tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x{_dataFieldOffset:x}, floors {MinTooltipChars}/{MinExternalTooltipChars} chars)");
         }
         catch (Exception e)
         {
@@ -242,30 +236,28 @@ internal static class TooltipInject
         // tells us which item is under the pointer.
         IntPtr cell = _getComponent!(handler, _cellType, IntPtr.Zero);
         if (cell == IntPtr.Zero) { Misses++; _pending = null; return; }
-        IntPtr data = Marshal.ReadIntPtr(cell, _dataFieldOffset);
-        if (data == IntPtr.Zero) { Misses++; _pending = null; return; }
-
-        // External providers must run before the refinable-item UID lookup. Junk and consumables do not
-        // share that layout; reading their offset as a UID can fail, but their market details are valid.
-        string? externalDetails = ValeLootTooltipApi.BuildDetails(data);
         string? ownDetails = null;
-        if (_refinableType != IntPtr.Zero
-            && IL2CPP.il2cpp_class_is_assignable_from(_refinableType, Il2CppMeta.ClassOf(data)))
+        if (InventoryPaint.TryGetMark(cell, out InventoryPaint.Mark mark) && mark.Level != 0)
         {
-            string? uid = Il2CppMeta.ReadStringField(data, _uidFieldOffset);
-            if (uid is not null && InventoryPaint.TryGetMark(uid, out InventoryPaint.Mark mark) && mark.Level != 0)
-            {
-                /**
-                 * TMP rich text in the rule's own colour, so the line reads the same as the cell it is
-                 * explaining. The rule's own name IS the explanation — there is no second vocabulary to
-                 * invent, because the player wrote the name.
-                 *
-                 * A rule with no `Tag` drops the bold prefix entirely rather than repeating its own name twice.
-                 */
-                ownDetails = mark.Label.Length > 0
-                    ? $"{Marker}<color={mark.Hex}><b>{mark.Label}</b> — {mark.Rule}</color>"
-                    : $"{Marker}<color={mark.Hex}>{mark.Rule}</color>";
-            }
+            /**
+             * TMP rich text in the rule's own colour, so the line reads the same as the cell it is
+             * explaining. The rule's own name IS the explanation — there is no second vocabulary to
+             * invent, because the player wrote the name.
+             *
+             * A rule with no `Tag` drops the bold prefix entirely rather than repeating its own name twice.
+             */
+            ownDetails = mark.Label.Length > 0
+                ? $"{Marker}<color={mark.Hex}><b>{mark.Label}</b> — {mark.Rule}</color>"
+                : $"{Marker}<color={mark.Hex}>{mark.Rule}</color>";
+        }
+
+        // Grimoire cells retain another item's pooled Data pointer. Never hand that stale object to a
+        // cooperative provider; the current cell still gets its own rule note through the lookup above.
+        string? externalDetails = null;
+        if (!InventoryPaint.IsPresentationOnly(cell))
+        {
+            IntPtr data = Marshal.ReadIntPtr(cell, _dataFieldOffset);
+            if (data != IntPtr.Zero) externalDetails = ValeLootTooltipApi.BuildDetails(data);
         }
         _pending = ownDetails is null
             ? externalDetails

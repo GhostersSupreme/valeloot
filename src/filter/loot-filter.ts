@@ -101,6 +101,8 @@ export interface LootCondition {
   minRefine?: number;
   /** Required/candidate substat lines. */
   stats?: StatCondition[];
+  /** Stats that must match independently of StatMatches, AnyStat, and AllStats. */
+  requiredStats?: StatCondition[];
   /**
    * Each nested array is one `AnyOf` block. Every block must have at least one matching stat,
    * while separate blocks and the rule's ordinary conditions are still ANDed.
@@ -357,6 +359,12 @@ export function matchesCondition(item: OwnedGear, when: LootCondition, context: 
     if (over !== when.overRoll) return false;
   }
 
+  if (when.requiredStats?.length) {
+    for (const condition of when.requiredStats) {
+      if (!matchesStat(item, condition)) return false;
+    }
+  }
+
   const boundedStatMatches =
     when.minStatMatches !== undefined ||
     when.maxStatMatches !== undefined;
@@ -537,6 +545,19 @@ export function explainCondition(
       over ? 'present' : 'absent', over === when.overRoll);
   }
 
+  for (const condition of when.requiredStats ?? []) {
+    const pass = matchesStat(item, condition);
+    const bounds = [
+      condition.minRollPct === undefined ? '' : `${condition.minRollPct}% roll`,
+      condition.minValue === undefined ? '' : `value ${condition.minValue}`,
+    ].filter(Boolean).join(', ') || 'present';
+    const line = item.lines.find((candidate) =>
+      candidate.stat.toLowerCase() === canonicalStatName(condition.stat).toLowerCase());
+    const actual = !line ? 'missing'
+      : `${line.base}${line.rollPct === null ? '' : ` · ${Math.round(line.rollPct)}%`}`;
+    add(`required-stat-${condition.stat}`, `Required ${condition.stat}`, bounds, actual, pass);
+  }
+
   const boundedStats = when.minStatMatches !== undefined || when.maxStatMatches !== undefined;
   let statHits = 0;
   if (when.stats?.length) {
@@ -679,33 +700,28 @@ function normalizeCondition(input: unknown): LootCondition {
     .map((entry) => entry.slice(0, 40));
   if (cleaned.length) when.names = cleaned;
   if (raw.statMode === 'any' || raw.statMode === 'all') when.statMode = raw.statMode;
-  if (Array.isArray(raw.stats)) {
-    when.stats = raw.stats
-      .filter((entry): entry is StatCondition => Boolean(entry) && typeof (entry as StatCondition).stat === 'string')
+  const normalizeStats = (value: unknown): StatCondition[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((entry): entry is StatCondition =>
+        Boolean(entry) && typeof (entry as StatCondition).stat === 'string')
       .map((entry) => {
         const min = Number(entry.minRollPct);
-        const value = Number(entry.minValue);
+        const printed = Number(entry.minValue);
         return {
           stat: canonicalStatName(entry.stat),
           ...(Number.isFinite(min) ? { minRollPct: Math.max(0, Math.min(100, min)) } : {}),
-          ...(Number.isFinite(value) ? { minValue: value } : {}),
+          ...(Number.isFinite(printed) ? { minValue: printed } : {}),
         };
       });
-  }
+  };
+  const requiredStats = normalizeStats(raw.requiredStats);
+  if (requiredStats.length) when.requiredStats = requiredStats;
+  const stats = normalizeStats(raw.stats);
+  if (stats.length) when.stats = stats;
   if (Array.isArray(raw.anyOfStats)) {
     when.anyOfStats = raw.anyOfStats
-      .filter((group): group is StatCondition[] => Array.isArray(group))
-      .map((group) => group
-        .filter((entry): entry is StatCondition => Boolean(entry) && typeof (entry as StatCondition).stat === 'string')
-        .map((entry) => {
-          const min = Number(entry.minRollPct);
-          const value = Number(entry.minValue);
-          return {
-            stat: canonicalStatName(entry.stat),
-            ...(Number.isFinite(min) ? { minRollPct: Math.max(0, Math.min(100, min)) } : {}),
-            ...(Number.isFinite(value) ? { minValue: value } : {}),
-          };
-        }))
+      .map(normalizeStats)
       .filter((group) => group.length > 0);
     if (!when.anyOfStats.length) delete when.anyOfStats;
   }

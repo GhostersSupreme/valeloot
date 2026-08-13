@@ -655,6 +655,7 @@ internal static class ItemCatalog
             .Append("#     Type Artifact, Card, Gem, Consumable, Junk     whole non-equipment kinds\n")
             .Append("#     Stat Agi >= 3                  the printed value, from the Stats section below\n")
             .Append("#     Stat Agi >= 90%                how WELL that line rolled — a different question\n")
+            .Append("#     RequireStat Agi >= 3           mandatory; excluded from StatMatches counting\n")
             .Append("#\n")
             .Append(FormatMarker).Append('\n')
             .Append(CountMarker).Append(count.ToString(CultureInfo.InvariantCulture)).Append('\n')

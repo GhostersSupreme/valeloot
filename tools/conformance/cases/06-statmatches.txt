@@ -19,6 +19,16 @@ Show "exactly three stats"
     StatMatches = 3
     Color     #4ade80
 
+# RequireStat is mandatory but does not contribute to the StatMatches count.
+Show "required AGI plus two farming stats"
+    RequireStat Agi >= 3
+    Stat        DoubleAttack >= 20
+    Stat        DamageMagic >= 5
+    Stat        MatkMult >= 5
+    Stat        Matk >= 5
+    StatMatches >= 2
+    Color       #f4d35e
+
 # StatMatches and AnyStat describe conflicting aggregation modes.
 # The whole block should be rejected.
 Show "invalid any plus matches"

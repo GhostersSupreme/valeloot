@@ -6,7 +6,7 @@ when a matching item is picked up.
 
 It is complete on its own. No companion app, no server, no account, nothing to sign up for.
 
-> ### ⬇ [Download ValeLoot 0.4.0](https://github.com/bjb2/valeloot/releases/download/v0.4.0/ValeLoot-0.4.0-with-BepInEx.zip)
+> ### ⬇ [Download ValeLoot 0.5.0](https://github.com/bjb2/valeloot/releases/download/v0.5.0/ValeLoot-0.5.0-with-BepInEx.zip)
 >
 > Unzip it into your SpiritVale folder, launch the game, press **F8**.
 >
@@ -157,6 +157,7 @@ Hide "vendor trash"
 | `AvgRoll < 35` | legacy alias for `AvgRollPct`; existing filters remain valid |
 | `Stat Agi >= 90%` | that stat's line rolled in the top tenth of its range |
 | `Stat Agi >= 3` | that stat *prints* at least 3 on this item |
+| `RequireStat Agi >= 3` | a mandatory stat that is not counted by `StatMatches` |
 | `StatMatches >= 3` | at least this many of the listed `Stat` conditions must match |
 | `AnyOf` with indented `Stat` lines | at least one stat inside that group must match |
 | `OverRoll` | a line above its normal maximum — the narrow over-roll form of Chaos |
@@ -219,12 +220,30 @@ those conditions to `HighRolls` to preserve that behavior. Keep `TopRolls` when 
 “the tooltip shows the maximum.” `AvgRoll` remains valid, but `AvgRollPct` is the clearer spelling
 written by the editor.
 
-**`AnyOf` combines required stats with alternatives.** Conditions directly under `Show` still all
-have to match. Each `AnyOf` group also has to match at least one of its indented `Stat` lines:
+**`RequireStat` separates mandatory stats from counted candidates.** Ordinary `Stat` lines normally
+all have to match, but `AnyStat` and `StatMatches` change how those lines are aggregated.
+`RequireStat` always has to match and never contributes to that aggregate:
+
+```text
+Show "Farming Target"
+    Name          "Flame Tongue Kunai"
+    RequireStat   Agi >= 3
+    Stat          DoubleAttack >= 20
+    Stat          DamageMagic >= 5
+    Stat          MatkMult >= 5
+    Stat          Matk >= 5
+    StatMatches   >= 2
+```
+
+This is `Agi >= 3 AND any two of the four Stat lines`. Without `RequireStat`, writing five ordinary
+`Stat` lines with `StatMatches >= 3` would also accept three candidate stats with no AGI.
+Multiple `RequireStat` lines are ANDed.
+
+**`AnyOf` groups genuine alternatives.** Every group must contribute at least one match:
 
 ```text
 Show "AGI plus attack"
-    Stat Agi >= 1
+    RequireStat Agi >= 1
     AnyOf
         Stat AtkMult >= 1
         Stat Atk     >= 1
@@ -233,8 +252,8 @@ Show "AGI plus attack"
 
 This is `Agi AND (AtkMult OR Atk)`. `AtkMult` is the game's Atk% stat. `AnyOf` currently accepts
 only `Stat` conditions; the indentation is required. A rule may contain multiple `AnyOf` groups, and
-each group must contribute a match. `AnyStat`, `AllStats`, and `StatMatches` continue to aggregate
-only the ordinary `Stat` lines outside those groups.
+each group must contribute a match. `AnyStat`, `AllStats`, and `StatMatches` aggregate only ordinary
+`Stat` lines—not `RequireStat` lines or stats nested inside `AnyOf`.
 
 **`StatMatches` lets a rule require some of its listed stats instead of all of them.** Normally,
 multiple `Stat` lines must all match. `AnyStat` changes that to at least one. `StatMatches` instead
@@ -250,6 +269,10 @@ Show "Magic four-of-six"
     Stat      CastRange >= 1
     StatMatches >= 4
 ```
+
+Use `RequireStat` when one stat is mandatory and only the remaining candidates should be counted, as
+in the farming-target example above. Avoid inflating the count to include the mandatory stat: that
+widens the rule by allowing enough optional stats to compensate for its absence.
 
 `StatMatches` supports `>=`, `>`, `=`, `<=`, and `<`. It cannot be combined with `AnyStat` or
 `AllStats`, because all three specify how the listed `Stat` lines are combined.

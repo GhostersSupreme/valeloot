@@ -151,8 +151,8 @@ internal static class HookCensus
             uid >= 0 ? $"offset 0x{uid:x}" : "backing field not found on RefinableItemData"));
         log($"census {(uid >= 0 ? "ok " : "MISS")} RefinableItemData.<UID>k__BackingField (item identity)");
 
-        // What the cell holds, and what a rule reads off it. `Data` is the whole chain's first link: a
-        // rename there is a filter that matches nothing at all, so it is counted rather than discovered.
+        // What data-backed cells hold. Equipment, artifact and stackable conditions depend on it;
+        // presentation-only Grimoire matching does not. Count it so loss of data facts is loud at boot.
         int data = cell == IntPtr.Zero ? -1 : Il2CppMeta.PropertyFieldOffset(cell, "Data");
         results.Add(new Result(
             "UIInventoryItem.Data (the item behind the cell)",

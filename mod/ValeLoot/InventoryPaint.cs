@@ -32,9 +32,9 @@ namespace ValeLoot;
 ///
 /// `UIInventoryTab&lt;T&gt;` holds `InventoryItemsUID`, a live `Dictionary&lt;string, UIInventoryItem&gt;`
 /// from item uid to the cell currently showing it. That map is maintained by the game, so this file
-/// walks it rather than trying to work out which cell is which. Each cell's item is then read by
-/// `ItemReader` and judged by the player's own rules, in process, with nothing connected: the rules
-/// live in a text file, the evaluation happens here, and the colour is decided before the frame ends.
+/// walks it rather than trying to work out which cell is which. Most tabs expose item data through the
+/// cell's `Data` field; Grimoires do not, so their facts come from the current cell text and dictionary
+/// key instead. Either path is judged by the player's own rules before the frame ends.
 ///
 /// ## The pooling hazard, from the disassembly rather than from a guess
 ///
@@ -127,8 +127,11 @@ internal static class InventoryPaint
         }
     }
 
-    /// <summary>The verdict for one item, or null. Read by the tooltip injector on the main thread.</summary>
-    public static bool TryGetMark(string uid, out Mark mark) => _marks.TryGetValue(uid, out mark);
+    /// <summary>The verdict drawn on a cell, or null. Read by the tooltip injector on the main thread.</summary>
+    public static bool TryGetMark(IntPtr cell, out Mark mark) => _marks.TryGetValue(cell, out mark);
+
+    /// <summary>True when the current cell must not expose its pooled Data pointer to tooltip providers.</summary>
+    public static bool IsPresentationOnly(IntPtr cell) => _presentationOnlyCells.Contains(cell);
 
     /**
      * How visible each level is.
@@ -160,15 +163,16 @@ internal static class InventoryPaint
     };
 
     /**
-     * uid -> what was drawn on that cell, rebuilt by every paint pass.
+     * cell -> its verdict, rebuilt by every paint pass.
      *
-     * It exists for the hover note, which needs to answer "which rule claimed this item" at a moment
-     * that is not a paint pass. Everything that writes or reads it — the paint pass and
-     * `HoverInfoHandler.OnPointerEnter` — runs on Unity's main thread, so it is a plain dictionary
-     * with no lock and no reference swap. It used to be a volatile swap because a socket thread
-     * delivered the table; the rules moved in-process, and the concurrency went with them.
+     * Keying the hover note by cell rather than by `Data.UID` is required for Grimoires: their pooled
+     * Data pointer belongs to an older item. Everything that writes or reads this table runs on Unity's
+     * main thread, so it needs no lock or reference swap.
      */
-    private static readonly Dictionary<string, Mark> _marks = new(StringComparer.Ordinal);
+    private static readonly Dictionary<IntPtr, Mark> _marks = new();
+
+    /// <summary>Current cells whose game Draw path does not own UIInventoryItem.Data.</summary>
+    private static readonly HashSet<IntPtr> _presentationOnlyCells = new();
 
     /// <summary>Reused per cell. One buffer for the whole session — see LootFilter.ItemFacts.</summary>
     private static readonly LootFilter.ItemFacts _facts = new();
@@ -241,7 +245,11 @@ internal static class InventoryPaint
     public static int MarkCount => _marks.Count;
 
     /// <summary>Drop everything remembered about what is drawn, so the next pass decides afresh.</summary>
-    public static void Forget() => _marks.Clear();
+    public static void Forget()
+    {
+        _marks.Clear();
+        _presentationOnlyCells.Clear();
+    }
 
     /// <summary>Apply configured tuning, and say what it is — a silent knob is an unfalsifiable one.</summary>
     public static void Configure(bool tint, int depth)
@@ -477,6 +485,11 @@ internal static class InventoryPaint
         if (name.IndexOf("Cosmetic", StringComparison.Ordinal) >= 0
             || name.IndexOf("Wardrobe", StringComparison.Ordinal) >= 0) return;
 
+        // Grimoire Draw renders directly from its config record and never writes UIInventoryItem.Data.
+        // Pooled cells retain that field, so reading it here would splice a previous equipment item's
+        // stats onto the current Grimoire name and type.
+        bool presentationOnly = string.Equals(name, "UIInventoryTab_Grimoires", StringComparison.Ordinal);
+
         if (_uidFieldOffset < 0) _uidFieldOffset = Il2CppMeta.FieldOffsetUp(tabClass, "InventoryItemsUID");
         if (_uidFieldOffset < 0) return;
 
@@ -502,17 +515,22 @@ internal static class InventoryPaint
         FilterParser.ParsedFilter filter = FilterFile.Current;
 
         _marks.Clear();
+        _presentationOnlyCells.Clear();
         Passes++;
         BagSnapshot.BeginPass(filter.Threshold);
         foreach ((IntPtr key, IntPtr cell) in Il2CppMeta.DictionaryEntries(dictionary))
         {
             if (cell == IntPtr.Zero) continue;
             string? uid = Il2CppMeta.ReadString(key);
+            if (presentationOnly) _presentationOnlyCells.Add(cell);
 
             // ONE read per cell, feeding both readers of it: the verdict this cell is painted with,
             // and the row the editor's bag snapshot counts against. The snapshot deliberately does
             // not walk the inventory itself — there is no second walk to disagree with this one.
-            bool readable = uid is not null && ItemReader.Read(cell, _facts);
+            bool readable = uid is not null
+                && (presentationOnly
+                    ? ItemReader.ReadPresentation(cell, uid, _facts)
+                    : ItemReader.Read(cell, _facts));
             Mark mark = readable ? Judge(_facts, filter) : default;
             if (readable) BagSnapshot.Observe(uid!, _facts);
 
@@ -520,7 +538,7 @@ internal static class InventoryPaint
             // cell wearing the previous item's mark, which `UIInventoryItem.Clear` does not undo.
             if (mark.Level > 0)
             {
-                _marks[uid!] = mark;
+                _marks[cell] = mark;
                 Draw(cell, mark);
                 CellsLit++;
             }
