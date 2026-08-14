@@ -748,8 +748,6 @@ function completionContextAt(text, caret) {
     return tail("border", words[1]);
   if (first === "sound" && words.length === 2)
     return tail("sound", words[1]);
-  if ((first === "color" || first === "colour") && words.length === 2)
-    return tail("color", words[1]);
   if (first === "tag" && words.length === 2)
     return tail("tag", words[1]);
   return null;
@@ -2891,10 +2889,6 @@ function candidates(context) {
   if (context.kind === 'percentValue') return fixedCandidates(PERCENT_VALUES, hit);
   if (context.kind === 'refineValue') return fixedCandidates(REFINE_VALUES, hit);
   if (context.kind === 'thresholdValue') return fixedCandidates(THRESHOLD_VALUES, hit);
-  if (context.kind === 'color') {
-    return [...new Set([...usedValues('Colou?r'), ...PALETTE])].filter(hit)
-      .map((text) => ({ text, meta: text }));
-  }
   if (context.kind === 'tag') return usedValues('Tag').filter(hit).map((text) => ({ text }));
   return [];
 }

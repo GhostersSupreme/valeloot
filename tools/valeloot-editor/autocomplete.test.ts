@@ -20,8 +20,8 @@ describe('completionContextAt', () => {
     expect(atEnd('Threshold 9')).toEqual({ kind: 'thresholdValue', token: '9', from: 10 });
   });
 
-  test('classifies decoration values', () => {
-    expect(atEnd('  Color #5')).toEqual({ kind: 'color', token: '#5', from: 8 });
+  test('completes reusable tags but not free-form colors', () => {
+    expect(atEnd('  Color #5')).toBeNull();
     expect(atEnd('  Tag FE')).toEqual({ kind: 'tag', token: 'FE', from: 6 });
   });
 

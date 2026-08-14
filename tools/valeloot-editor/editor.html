@@ -1888,10 +1888,6 @@ function candidates(context) {
   if (context.kind === 'percentValue') return fixedCandidates(PERCENT_VALUES, hit);
   if (context.kind === 'refineValue') return fixedCandidates(REFINE_VALUES, hit);
   if (context.kind === 'thresholdValue') return fixedCandidates(THRESHOLD_VALUES, hit);
-  if (context.kind === 'color') {
-    return [...new Set([...usedValues('Colou?r'), ...PALETTE])].filter(hit)
-      .map((text) => ({ text, meta: text }));
-  }
   if (context.kind === 'tag') return usedValues('Tag').filter(hit).map((text) => ({ text }));
   return [];
 }

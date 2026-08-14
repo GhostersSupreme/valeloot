@@ -16,7 +16,6 @@ export type CompletionKind =
   | 'percentValue'
   | 'refineValue'
   | 'thresholdValue'
-  | 'color'
   | 'tag';
 
 export interface CompletionContext {
@@ -135,7 +134,6 @@ export function completionContextAt(text: string, caret: number): CompletionCont
   if (first === 'background' && words.length === 2) return tail('background', words[1]);
   if (first === 'border' && words.length === 2) return tail('border', words[1]);
   if (first === 'sound' && words.length === 2) return tail('sound', words[1]);
-  if ((first === 'color' || first === 'colour') && words.length === 2) return tail('color', words[1]);
   if (first === 'tag' && words.length === 2) return tail('tag', words[1]);
   return null;
 }
