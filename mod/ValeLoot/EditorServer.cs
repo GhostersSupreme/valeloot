@@ -1158,6 +1158,7 @@ internal static class EditorServer
      */
     private static void PublishCatalogIfChanged()
     {
+        ItemCatalog.EnsureReady();
         int generation = ItemCatalog.Ready ? ItemCatalog.Count : 0;
         if (generation == _catalogGeneration) return;
         _catalogGeneration = generation;

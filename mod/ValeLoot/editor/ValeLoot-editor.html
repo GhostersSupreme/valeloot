@@ -628,6 +628,145 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
 
 <script>
 (function(){
+// tools/valeloot-editor/autocomplete.ts
+var INDENT = "    ";
+function editIndent(text, start, end, outdent) {
+  if (!outdent && start === end) {
+    return {
+      text: text.slice(0, start) + INDENT + text.slice(end),
+      selectionStart: start + INDENT.length,
+      selectionEnd: end + INDENT.length
+    };
+  }
+  const firstLineStart = text.lastIndexOf(`
+`, Math.max(0, start - 1)) + 1;
+  const selectionAnchor = end > start && text[end - 1] === `
+` ? end - 1 : end;
+  const lastLineStart = text.lastIndexOf(`
+`, Math.max(0, selectionAnchor - 1)) + 1;
+  const nextBreak = text.indexOf(`
+`, lastLineStart);
+  const blockEnd = nextBreak < 0 ? text.length : nextBreak;
+  const lines = text.slice(firstLineStart, blockEnd).split(`
+`);
+  if (!outdent) {
+    const replacement2 = lines.map((line) => INDENT + line).join(`
+`);
+    const added = INDENT.length * lines.length;
+    return {
+      text: text.slice(0, firstLineStart) + replacement2 + text.slice(blockEnd),
+      selectionStart: start + INDENT.length,
+      selectionEnd: end + added
+    };
+  }
+  let removed = 0;
+  let removedFromFirst = 0;
+  const replacement = lines.map((line, index) => {
+    const prefix = /^(?: {1,4}|\t)/.exec(line)?.[0] || "";
+    if (index === 0)
+      removedFromFirst = prefix.length;
+    removed += prefix.length;
+    return line.slice(prefix.length);
+  }).join(`
+`);
+  return {
+    text: text.slice(0, firstLineStart) + replacement + text.slice(blockEnd),
+    selectionStart: Math.max(firstLineStart, start - removedFromFirst),
+    selectionEnd: Math.max(firstLineStart, end - removed)
+  };
+}
+var BOUNDED_COUNTS = {
+  statmatches: true,
+  toprolls: true,
+  highrolls: true
+};
+function completionContextAt(text, caret) {
+  const upto = text.slice(0, caret);
+  const lineStart = upto.lastIndexOf(`
+`) + 1;
+  const line = upto.slice(lineStart);
+  if (line.trimStart().startsWith("#"))
+    return null;
+  const indented = /^\s/.test(line);
+  const words = line.trimStart().split(/\s+/);
+  const first = (words[0] || "").toLowerCase();
+  const tail = (kind, token = "") => ({
+    kind,
+    token,
+    from: lineStart + line.length - token.length
+  });
+  if (!indented) {
+    if (words.length <= 1)
+      return tail("keyword", words[0]);
+    if (first === "alwaysshow" || first === "alwayshide")
+      return listContext("item", line, lineStart);
+    if (first === "threshold" && words.length === 2)
+      return tail("thresholdValue", words[1]);
+    return null;
+  }
+  if (words.length <= 1)
+    return tail("cond", words[0]);
+  if (first === "name")
+    return listContext("item", line, lineStart);
+  if (first === "type")
+    return listContext("type", line, lineStart);
+  if (first === "stat" || first === "requirestat") {
+    if (words.length === 2)
+      return tail("stat", words[1]);
+    if (words.length === 3)
+      return tail("statOperator", words[2]);
+    if (words.length === 4)
+      return tail("statValue", words[3]);
+    return null;
+  }
+  if (BOUNDED_COUNTS[first]) {
+    if (words.length === 2)
+      return tail("operator", words[1]);
+    if (words.length === 3)
+      return tail("countValue", words[2]);
+    return null;
+  }
+  if (first === "avgrollpct" || first === "avgroll") {
+    if (words.length === 2)
+      return tail("operator", words[1]);
+    if (words.length === 3)
+      return tail("percentValue", words[2]);
+    return null;
+  }
+  if (first === "refine") {
+    if (words.length === 2)
+      return tail("minimumOperator", words[1]);
+    if (words.length === 3)
+      return tail("refineValue", words[2]);
+    return null;
+  }
+  if (first === "highlight" && words.length === 2)
+    return tail("level", words[1]);
+  if (first === "background" && words.length === 2)
+    return tail("background", words[1]);
+  if (first === "border" && words.length === 2)
+    return tail("border", words[1]);
+  if (first === "sound" && words.length === 2)
+    return tail("sound", words[1]);
+  if ((first === "color" || first === "colour") && words.length === 2)
+    return tail("color", words[1]);
+  if (first === "tag" && words.length === 2)
+    return tail("tag", words[1]);
+  return null;
+}
+function listContext(kind, line, lineStart) {
+  const afterKeyword = line.replace(/^\s*\S+\s*/, "");
+  const comma = afterKeyword.lastIndexOf(",");
+  const afterComma = afterKeyword.slice(comma + 1);
+  const whitespace = afterComma.length - afterComma.trimStart().length;
+  const token = afterComma.slice(whitespace).replace(/^"/, "");
+  return {
+    kind,
+    token,
+    from: lineStart + line.length - token.length - (/^"/.test(afterComma.slice(whitespace)) ? 1 : 0)
+  };
+}
+
 // src/filter/loot-filter.ts
 var STAT_ALIASES = [
   { friendly: "AttackSpeed", internal: "AtkSpd" },
@@ -1486,7 +1625,9 @@ globalThis.VL = {
   normalizeSoundName,
   LOOT_HIGHLIGHTS,
   BUILTIN_LOOT_SOUNDS,
-  STAT_ALIASES
+  STAT_ALIASES,
+  completionContextAt,
+  editIndent
 };
 
 })();
@@ -2639,33 +2780,47 @@ let acIndex = 0;
 let acRange = null;
 
 function contextAt() {
-  const upto = src.value.slice(0, src.selectionStart);
-  const lineStart = upto.lastIndexOf('\n') + 1;
-  const line = upto.slice(lineStart);
-  if (line.trimStart().startsWith('#')) return null;
-  const indented = /^\s/.test(line);
-  const words = line.trimStart().split(/\s+/);
-  const first = (words[0] || '').toLowerCase();
-  const tail = (token) => ({ token: token || '', from: lineStart + line.length - (token || '').length });
-
-  if (!indented && words.length <= 1) return Object.assign({ kind: 'keyword' }, tail(words[0]));
-  if (!indented && (first === 'alwaysshow' || first === 'alwayshide')) return itemContext(line, lineStart);
-  if (!indented) return null;
-  if (words.length <= 1) return Object.assign({ kind: 'cond' }, tail(words[0]));
-  if (first === 'name') return itemContext(line, lineStart);
-  if ((first === 'stat' || first === 'requirestat') && words.length === 2) {
-    return Object.assign({ kind: 'stat' }, tail(words[1]));
-  }
-  if (first === 'type') return Object.assign({ kind: 'type' }, tail(words[words.length - 1]));
-  if (first === 'highlight' && words.length === 2) return Object.assign({ kind: 'level' }, tail(words[1]));
-  if (first === 'background' && words.length === 2) return Object.assign({ kind: 'background' }, tail(words[1]));
-  if (first === 'border' && words.length === 2) return Object.assign({ kind: 'border' }, tail(words[1]));
-  if (first === 'sound' && words.length === 2) return Object.assign({ kind: 'sound' }, tail(words[1]));
-  return null;
+  return VL.completionContextAt(src.value, src.selectionStart);
 }
-function itemContext(line, lineStart) {
-  const after = line.replace(/^\s*\S+\s*/, '');
-  return { kind: 'item', token: after.replace(/^"/, ''), from: lineStart + line.length - after.length };
+
+const STAT_OPERATORS = [
+  ['>=', 'at least this value'],
+  ['>', 'strictly above this value'],
+];
+const BOUND_OPERATORS = [
+  ...STAT_OPERATORS,
+  ['<=', 'at most this value'],
+  ['<', 'strictly below this value'],
+  ['=', 'exactly this value'],
+];
+const STAT_VALUES = [
+  ['1', 'printed value +1 or better'],
+  ['3', 'printed value +3 or better'],
+  ['5', 'printed value +5 or better'],
+  ['10', 'printed value +10 or better'],
+  ['90%', 'top 10% of this stat\u2019s legal roll range'],
+];
+const COUNT_VALUES = [['1'], ['2'], ['3'], ['4']];
+const PERCENT_VALUES = [['35'], ['50'], ['75'], ['90']];
+const REFINE_VALUES = [['1'], ['5'], ['10']];
+const THRESHOLD_VALUES = [['90', 'the default high-roll cutoff']];
+
+function fixedCandidates(options, hit) {
+  return options.filter(([value]) => hit(value)).map(([text, help]) => ({ text, help }));
+}
+
+function usedValues(keyword) {
+  const currentLine = src.value.slice(0, src.selectionStart).split('\n').length - 1;
+  const pattern = new RegExp('^\\s*' + keyword + '\\s+(.+?)\\s*$', 'i');
+  const seen = new Set();
+  return src.value.split('\n').flatMap((line, index) => {
+    if (index === currentLine) return [];
+    const match = pattern.exec(line);
+    const value = match ? match[1].replace(/^\"|\"$/g, '') : '';
+    if (!value || seen.has(value.toLowerCase())) return [];
+    seen.add(value.toLowerCase());
+    return [value];
+  });
 }
 
 function statCandidates(query) {
@@ -2727,6 +2882,20 @@ function candidates(context) {
     return vocab.items.filter((i) => hit(i.name)).slice(0, 80)
       .map((i) => ({ text: i.name, meta: i.type + (i.level ? ' · lv' + i.level : '') }));
   }
+  if (context.kind === 'statOperator' || context.kind === 'minimumOperator') {
+    return fixedCandidates(STAT_OPERATORS, hit);
+  }
+  if (context.kind === 'operator') return fixedCandidates(BOUND_OPERATORS, hit);
+  if (context.kind === 'statValue') return fixedCandidates(STAT_VALUES, hit);
+  if (context.kind === 'countValue') return fixedCandidates(COUNT_VALUES, hit);
+  if (context.kind === 'percentValue') return fixedCandidates(PERCENT_VALUES, hit);
+  if (context.kind === 'refineValue') return fixedCandidates(REFINE_VALUES, hit);
+  if (context.kind === 'thresholdValue') return fixedCandidates(THRESHOLD_VALUES, hit);
+  if (context.kind === 'color') {
+    return [...new Set([...usedValues('Colou?r'), ...PALETTE])].filter(hit)
+      .map((text) => ({ text, meta: text }));
+  }
+  if (context.kind === 'tag') return usedValues('Tag').filter(hit).map((text) => ({ text }));
   return [];
 }
 
@@ -2764,7 +2933,8 @@ function accept(index) {
   const before = src.value.slice(0, acRange.from);
   const after = src.value.slice(src.selectionStart);
   const quoted = acRange.kind === 'item' && /\s/.test(item.text) ? '"' + item.text + '"' : item.text;
-  const insert = quoted + (acRange.kind === 'cond' || acRange.kind === 'keyword' ? ' ' : '');
+  const spaced = ['cond', 'keyword', 'statOperator', 'operator', 'minimumOperator'].includes(acRange.kind);
+  const insert = quoted + (spaced ? ' ' : '');
   src.value = before + insert + after;
   const caret = before.length + insert.length;
   src.setSelectionRange(caret, caret);
@@ -4022,6 +4192,18 @@ src.addEventListener('click', coach);
 src.addEventListener('keyup', (event) => { if (event.key.startsWith('Arrow')) coach(); });
 src.addEventListener('keydown', (event) => {
   if (event.ctrlKey && event.code === 'Space') { event.preventDefault(); showAC(true); return; }
+  if (event.key === 'Tab') {
+    if (!event.shiftKey && acItems.length) { event.preventDefault(); accept(acIndex); return; }
+    event.preventDefault();
+    const changed = VL.editIndent(src.value, src.selectionStart, src.selectionEnd, event.shiftKey);
+    src.value = changed.text;
+    src.setSelectionRange(changed.selectionStart, changed.selectionEnd);
+    hideAC();
+    refresh();
+    src.focus();
+    src.setSelectionRange(changed.selectionStart, changed.selectionEnd);
+    return;
+  }
   if (!acItems.length) return;
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault();
@@ -4032,7 +4214,7 @@ src.addEventListener('keydown', (event) => {
     });
     return;
   }
-  if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); accept(acIndex); return; }
+  if (event.key === 'Enter') { event.preventDefault(); accept(acIndex); return; }
   if (event.key === 'Escape') hideAC();
 });
 

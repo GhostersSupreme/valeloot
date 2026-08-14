@@ -1777,33 +1777,47 @@ let acIndex = 0;
 let acRange = null;
 
 function contextAt() {
-  const upto = src.value.slice(0, src.selectionStart);
-  const lineStart = upto.lastIndexOf('\n') + 1;
-  const line = upto.slice(lineStart);
-  if (line.trimStart().startsWith('#')) return null;
-  const indented = /^\s/.test(line);
-  const words = line.trimStart().split(/\s+/);
-  const first = (words[0] || '').toLowerCase();
-  const tail = (token) => ({ token: token || '', from: lineStart + line.length - (token || '').length });
-
-  if (!indented && words.length <= 1) return Object.assign({ kind: 'keyword' }, tail(words[0]));
-  if (!indented && (first === 'alwaysshow' || first === 'alwayshide')) return itemContext(line, lineStart);
-  if (!indented) return null;
-  if (words.length <= 1) return Object.assign({ kind: 'cond' }, tail(words[0]));
-  if (first === 'name') return itemContext(line, lineStart);
-  if ((first === 'stat' || first === 'requirestat') && words.length === 2) {
-    return Object.assign({ kind: 'stat' }, tail(words[1]));
-  }
-  if (first === 'type') return Object.assign({ kind: 'type' }, tail(words[words.length - 1]));
-  if (first === 'highlight' && words.length === 2) return Object.assign({ kind: 'level' }, tail(words[1]));
-  if (first === 'background' && words.length === 2) return Object.assign({ kind: 'background' }, tail(words[1]));
-  if (first === 'border' && words.length === 2) return Object.assign({ kind: 'border' }, tail(words[1]));
-  if (first === 'sound' && words.length === 2) return Object.assign({ kind: 'sound' }, tail(words[1]));
-  return null;
+  return VL.completionContextAt(src.value, src.selectionStart);
 }
-function itemContext(line, lineStart) {
-  const after = line.replace(/^\s*\S+\s*/, '');
-  return { kind: 'item', token: after.replace(/^"/, ''), from: lineStart + line.length - after.length };
+
+const STAT_OPERATORS = [
+  ['>=', 'at least this value'],
+  ['>', 'strictly above this value'],
+];
+const BOUND_OPERATORS = [
+  ...STAT_OPERATORS,
+  ['<=', 'at most this value'],
+  ['<', 'strictly below this value'],
+  ['=', 'exactly this value'],
+];
+const STAT_VALUES = [
+  ['1', 'printed value +1 or better'],
+  ['3', 'printed value +3 or better'],
+  ['5', 'printed value +5 or better'],
+  ['10', 'printed value +10 or better'],
+  ['90%', 'top 10% of this stat\u2019s legal roll range'],
+];
+const COUNT_VALUES = [['1'], ['2'], ['3'], ['4']];
+const PERCENT_VALUES = [['35'], ['50'], ['75'], ['90']];
+const REFINE_VALUES = [['1'], ['5'], ['10']];
+const THRESHOLD_VALUES = [['90', 'the default high-roll cutoff']];
+
+function fixedCandidates(options, hit) {
+  return options.filter(([value]) => hit(value)).map(([text, help]) => ({ text, help }));
+}
+
+function usedValues(keyword) {
+  const currentLine = src.value.slice(0, src.selectionStart).split('\n').length - 1;
+  const pattern = new RegExp('^\\s*' + keyword + '\\s+(.+?)\\s*$', 'i');
+  const seen = new Set();
+  return src.value.split('\n').flatMap((line, index) => {
+    if (index === currentLine) return [];
+    const match = pattern.exec(line);
+    const value = match ? match[1].replace(/^\"|\"$/g, '') : '';
+    if (!value || seen.has(value.toLowerCase())) return [];
+    seen.add(value.toLowerCase());
+    return [value];
+  });
 }
 
 function statCandidates(query) {
@@ -1865,6 +1879,20 @@ function candidates(context) {
     return vocab.items.filter((i) => hit(i.name)).slice(0, 80)
       .map((i) => ({ text: i.name, meta: i.type + (i.level ? ' · lv' + i.level : '') }));
   }
+  if (context.kind === 'statOperator' || context.kind === 'minimumOperator') {
+    return fixedCandidates(STAT_OPERATORS, hit);
+  }
+  if (context.kind === 'operator') return fixedCandidates(BOUND_OPERATORS, hit);
+  if (context.kind === 'statValue') return fixedCandidates(STAT_VALUES, hit);
+  if (context.kind === 'countValue') return fixedCandidates(COUNT_VALUES, hit);
+  if (context.kind === 'percentValue') return fixedCandidates(PERCENT_VALUES, hit);
+  if (context.kind === 'refineValue') return fixedCandidates(REFINE_VALUES, hit);
+  if (context.kind === 'thresholdValue') return fixedCandidates(THRESHOLD_VALUES, hit);
+  if (context.kind === 'color') {
+    return [...new Set([...usedValues('Colou?r'), ...PALETTE])].filter(hit)
+      .map((text) => ({ text, meta: text }));
+  }
+  if (context.kind === 'tag') return usedValues('Tag').filter(hit).map((text) => ({ text }));
   return [];
 }
 
@@ -1902,7 +1930,8 @@ function accept(index) {
   const before = src.value.slice(0, acRange.from);
   const after = src.value.slice(src.selectionStart);
   const quoted = acRange.kind === 'item' && /\s/.test(item.text) ? '"' + item.text + '"' : item.text;
-  const insert = quoted + (acRange.kind === 'cond' || acRange.kind === 'keyword' ? ' ' : '');
+  const spaced = ['cond', 'keyword', 'statOperator', 'operator', 'minimumOperator'].includes(acRange.kind);
+  const insert = quoted + (spaced ? ' ' : '');
   src.value = before + insert + after;
   const caret = before.length + insert.length;
   src.setSelectionRange(caret, caret);
@@ -3160,6 +3189,18 @@ src.addEventListener('click', coach);
 src.addEventListener('keyup', (event) => { if (event.key.startsWith('Arrow')) coach(); });
 src.addEventListener('keydown', (event) => {
   if (event.ctrlKey && event.code === 'Space') { event.preventDefault(); showAC(true); return; }
+  if (event.key === 'Tab') {
+    if (!event.shiftKey && acItems.length) { event.preventDefault(); accept(acIndex); return; }
+    event.preventDefault();
+    const changed = VL.editIndent(src.value, src.selectionStart, src.selectionEnd, event.shiftKey);
+    src.value = changed.text;
+    src.setSelectionRange(changed.selectionStart, changed.selectionEnd);
+    hideAC();
+    refresh();
+    src.focus();
+    src.setSelectionRange(changed.selectionStart, changed.selectionEnd);
+    return;
+  }
   if (!acItems.length) return;
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault();
@@ -3170,7 +3211,7 @@ src.addEventListener('keydown', (event) => {
     });
     return;
   }
-  if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); accept(acIndex); return; }
+  if (event.key === 'Enter') { event.preventDefault(); accept(acIndex); return; }
   if (event.key === 'Escape') hideAC();
 });
 
