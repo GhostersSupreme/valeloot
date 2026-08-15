@@ -127,8 +127,21 @@ internal static class InventoryPaint
         }
     }
 
-    /// <summary>The verdict drawn on a cell, or null. Read by the tooltip injector on the main thread.</summary>
-    public static bool TryGetMark(IntPtr cell, out Mark mark) => _marks.TryGetValue(cell, out mark);
+    /// <summary>
+    /// Resolve the verdict for the item under the pointer now, rather than trusting a cell cache that a
+    /// favorite reorder can invalidate. Grimoires have no current Data pointer and retain the paint cache.
+    /// </summary>
+    public static bool TryGetMark(IntPtr cell, out Mark mark)
+    {
+        if (cell != IntPtr.Zero
+            && !_presentationOnlyCells.Contains(cell)
+            && ItemReader.Read(cell, _hoverFacts))
+        {
+            mark = Judge(_hoverFacts, FilterFile.Current);
+            return mark.Level > 0;
+        }
+        return _marks.TryGetValue(cell, out mark);
+    }
 
     /// <summary>True when the current cell must not expose its pooled Data pointer to tooltip providers.</summary>
     public static bool IsPresentationOnly(IntPtr cell) => _presentationOnlyCells.Contains(cell);
@@ -163,11 +176,12 @@ internal static class InventoryPaint
     };
 
     /**
-     * cell -> its verdict, rebuilt by every paint pass.
+     * cell -> its painted verdict, rebuilt by every paint pass.
      *
-     * Keying the hover note by cell rather than by `Data.UID` is required for Grimoires: their pooled
-     * Data pointer belongs to an older item. Everything that writes or reads this table runs on Unity's
-     * main thread, so it needs no lock or reference swap.
+     * The cache remains authoritative for Grimoires, whose pooled Data pointer belongs to an older item,
+     * and is a fallback when another cell cannot be read. Ordinary tooltip hovers judge current Data so a
+     * favorite reorder cannot detach a note from the artifact it describes. All access is on Unity's main
+     * thread, so neither path needs a lock.
      */
     private static readonly Dictionary<IntPtr, Mark> _marks = new();
 
@@ -176,6 +190,8 @@ internal static class InventoryPaint
 
     /// <summary>Reused per cell. One buffer for the whole session — see LootFilter.ItemFacts.</summary>
     private static readonly LootFilter.ItemFacts _facts = new();
+    /// <summary>Separate from the paint buffer because a hover can re-enter while UI is redrawing.</summary>
+    private static readonly LootFilter.ItemFacts _hoverFacts = new();
 
     private static readonly List<object> _detours = new();
     private static readonly List<RenderPageFn> _pageHooks = new();
@@ -198,6 +214,12 @@ internal static class InventoryPaint
     /// <summary>A `System.Type` for the root `UnityEngine.UI.Image` that already draws each card.</summary>
     private static IntPtr _imageType;
     private static int _animationFrame;
+    /// <summary>
+    /// A targeted Redraw can run while favorite sorting is still rebinding pooled cells. Hold the tab
+    /// alive and repaint only after one complete main-thread tick, when `InventoryItemsUID` is stable.
+    /// </summary>
+    private static IntPtr _pendingTabHandle;
+    private static DeferredRepaintState _deferredRepaint;
 
     private sealed class FillState
     {
@@ -434,6 +456,7 @@ internal static class InventoryPaint
     public static void Uninstall()
     {
         RestoreAllFills();
+        ReleaseQueuedPaint();
         for (int i = 0; i < _detours.Count; i++)
         {
             object? handle = _detours[i];
@@ -448,21 +471,23 @@ internal static class InventoryPaint
     }
 
     /**
-     * Paint AFTER the game has finished its own repaint.
+     * Paint only after the game has finished rebinding cells.
      *
-     * Order matters: the original rebinds cells to items and repopulates `InventoryItemsUID`, so painting
-     * first would mark the panel's previous contents.
-     *
-     * Both detours run the same full pass rather than a targeted one. A pass is a dictionary walk and one
-     * call per visible cell, and doing the whole panel is what makes the mark state idempotent: there is
-     * no way for a cell to be left holding a verdict that belonged to a recycled item.
+     * RenderPage owns the completed page and is safe to paint synchronously. Redraw owns one item and
+     * can run inside favorite sorting, while `InventoryItemsUID` still describes the previous ordering;
+     * its full-panel paint is deferred until the next complete main-thread tick. Every actual paint is
+     * still a full dictionary walk so pooled cells cannot retain another item's verdict.
      */
     private static void RenderPageDetour(int index, IntPtr self, IntPtr methodInfo)
     {
         RenderPageFn? original = index < _pageOriginals.Count ? _pageOriginals[index] : null;
         original?.Invoke(self, methodInfo);
         // A hook body must never let an exception cross back into il2cpp code.
-        try { Paint(self); }
+        try
+        {
+            Paint(self);
+            CancelQueuedPaint(self);
+        }
         catch { Errors++; }
     }
 
@@ -470,8 +495,54 @@ internal static class InventoryPaint
     {
         RedrawFn? original = index < _itemOriginals.Count ? _itemOriginals[index] : null;
         original?.Invoke(self, uid, methodInfo);
-        try { Paint(self); }
+        try { QueuePaint(self); }
         catch { Errors++; }
+    }
+    private static void QueuePaint(IntPtr tab)
+    {
+        if (tab == IntPtr.Zero) return;
+        if (_pendingTabHandle != IntPtr.Zero && _deferredRepaint.Target == tab)
+        {
+            _deferredRepaint.Queue(tab);
+            return;
+        }
+
+        ReleaseQueuedPaint();
+        IntPtr handle = IL2CPP.il2cpp_gchandle_new(tab, false);
+        if (handle == IntPtr.Zero) return;
+        _pendingTabHandle = handle;
+        _deferredRepaint.Queue(tab);
+    }
+
+    private static void CancelQueuedPaint(IntPtr tab)
+    {
+        if (_deferredRepaint.Cancel(tab)) ReleaseQueuedPaint();
+    }
+
+    private static void PaintQueued()
+    {
+        if (_pendingTabHandle == IntPtr.Zero || !_deferredRepaint.TryTake(out _)) return;
+
+        IntPtr target = IL2CPP.il2cpp_gchandle_get_target(_pendingTabHandle);
+        try
+        {
+            if (target != IntPtr.Zero && (_objectAlive is null || _objectAlive(target, IntPtr.Zero)))
+            {
+                Paint(target);
+            }
+        }
+        finally
+        {
+            ReleaseQueuedPaint();
+        }
+    }
+
+    private static void ReleaseQueuedPaint()
+    {
+        IntPtr handle = _pendingTabHandle;
+        _pendingTabHandle = IntPtr.Zero;
+        _deferredRepaint.Clear();
+        if (handle != IntPtr.Zero) IL2CPP.il2cpp_gchandle_free(handle);
     }
 
     private static void Paint(IntPtr tab)
@@ -774,34 +845,43 @@ internal static class InventoryPaint
     }
 
     /**
-     * Advance visible hue backgrounds from the one existing PlayerSave.Update hook.
+     * Finish queued repaints and advance visible hue backgrounds from the one PlayerSave.Update hook.
      *
-     * Four-frame throttling is 15 Hz at the game's usual 60 fps: smooth enough for a slow hue wheel,
-     * while a bag full of ordinary border/fill rules costs only one integer comparison per frame.
+     * A Redraw repaint waits one complete tick so favorite sorting cannot expose a half-rebound cell
+     * dictionary. Hue animation remains four-frame throttled (15 Hz at the usual 60 fps). This method
+     * owns its exception boundary because editor publishing may disable itself without disabling paint.
      */
     public static void Tick()
     {
-        if ((_animationFrame++ & 3) != 0 || _fills.Count == 0) return;
-
-        _deadFills.Clear();
-        foreach ((IntPtr image, FillState state) in _fills)
+        try
         {
-            IntPtr target = IL2CPP.il2cpp_gchandle_get_target(state.Handle);
-            if (target == IntPtr.Zero || !(_objectAlive?.Invoke(target, IntPtr.Zero) ?? false))
+            PaintQueued();
+            if ((_animationFrame++ & 3) != 0 || _fills.Count == 0) return;
+
+            _deadFills.Clear();
+            foreach ((IntPtr image, FillState state) in _fills)
             {
-                _deadFills.Add(image);
-                continue;
+                IntPtr target = IL2CPP.il2cpp_gchandle_get_target(state.Handle);
+                if (target == IntPtr.Zero || !(_objectAlive?.Invoke(target, IntPtr.Zero) ?? false))
+                {
+                    _deadFills.Add(image);
+                    continue;
+                }
+                if (state.Background != LootFilter.BackgroundHolo) continue;
+
+                HoloColor(state, out float r, out float g, out float b);
+                WriteBackground(target, state, r, g, b);
             }
-            if (state.Background != LootFilter.BackgroundHolo) continue;
 
-            HoloColor(state, out float r, out float g, out float b);
-            WriteBackground(target, state, r, g, b);
+            for (int i = 0; i < _deadFills.Count; i++)
+            {
+                IntPtr image = _deadFills[i];
+                if (_fills.TryGetValue(image, out FillState? state)) ReleaseFill(image, state, restore: false);
+            }
         }
-
-        for (int i = 0; i < _deadFills.Count; i++)
+        catch
         {
-            IntPtr image = _deadFills[i];
-            if (_fills.TryGetValue(image, out FillState? state)) ReleaseFill(image, state, restore: false);
+            Errors++;
         }
     }
 

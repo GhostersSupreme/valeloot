@@ -1322,15 +1322,16 @@ internal static class EditorServer
      * `PlayerSave.Update`: a second detour on the same method would be two mods fighting over one
      * trampoline, so everything that wants a per-frame main-thread tick asks for it here.
      *
-     * The whole body is guarded, because this runs inside a detour on a per-frame engine method: an
-     * exception escaping into native code is a crash, not a stack trace. The first failure disarms
-     * the tick and says so once — a log line per frame is worse than a dead hotkey.
+     * Editor publishing is guarded because this runs inside a detour on a per-frame engine method: an
+     * exception escaping into native code is a crash, not a stack trace. Inventory paint owns its own
+     * boundary and runs outside that fuse, so an editor failure cannot stop deferred repaints or holo.
      *
      * Internal rather than private so it can be driven directly by a test harness: the game holds
      * this DLL during development, so the only way to exercise a frame is to call the frame.
      */
     internal static void Tick(IntPtr playerSave)
     {
+        InventoryPaint.Tick();
         if (_tickFailed) return;
         try
         {
@@ -1338,8 +1339,6 @@ internal static class EditorServer
             PublishCatalogIfChanged();
             InventoryWatch.Tick(playerSave);
             BagFillIndicator.Tick(playerSave);
-            InventoryPaint.Tick();
-
             if (_getKeyDown is not null && _hotkeyCode >= 0 && _getKeyDown(_hotkeyCode, IntPtr.Zero) != 0)
             {
                 Open();
