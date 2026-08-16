@@ -46,6 +46,11 @@ internal static class TooltipInject
 
     // Cooperative async refresh state. The base text never contains ValeLoot/provider additions, so a
     // later refresh REPLACES "Checking..." instead of appending a second market block underneath it.
+    //
+    // Important: SpiritVale may emit OnPointerExit for the inventory cell while leaving the tooltip visible
+    // (for example while the tooltip itself becomes the top UI raycast target). Therefore this state is
+    // intentionally retained across pointer-exit and replaced only by the next OnPointerEnter. Refreshing a
+    // hidden old TMP object is harmless; clearing it too early makes asynchronous providers unreliable.
     private static IntPtr _currentHandler;
     private static IntPtr _currentText;
     private static string? _currentBaseText;
@@ -109,7 +114,7 @@ internal static class TooltipInject
             Installed = true;
             log($"tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x{_dataFieldOffset:x}, "
               + $"floors {MinTooltipChars}/{MinExternalTooltipChars} chars, longest-write targeting, "
-              + $"async refresh {(onExit is null ? "without exit guard" : "ready")})");
+              + "async refresh retains last valid target across pointer-exit)");
         }
         catch (Exception e)
         {
@@ -141,6 +146,7 @@ internal static class TooltipInject
         _currentBaseText = null;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
+        _refreshMissReported = false;
 
         if (Enabled && self != IntPtr.Zero)
         {
@@ -170,14 +176,11 @@ internal static class TooltipInject
 
     private static void ExitDetour(IntPtr self, IntPtr eventData, IntPtr methodInfo)
     {
+        // Do NOT clear _currentHandler/_currentText/_currentBaseText here. SpiritVale can raise a pointer-exit
+        // as part of normal tooltip presentation while the tooltip remains visible. The next pointer-enter
+        // atomically replaces the retained target, which also prevents a late provider response from writing
+        // an old item's details onto a newly hovered item.
         _exitOriginal?.Invoke(self, eventData, methodInfo);
-        if (self != _currentHandler) return;
-        _currentHandler = IntPtr.Zero;
-        _currentText = IntPtr.Zero;
-        _currentBaseText = null;
-        _candidateText = IntPtr.Zero;
-        _candidateBaseText = null;
-        _pending = null;
     }
 
     private static void BuildPending(IntPtr handler, bool countHover)
@@ -286,8 +289,8 @@ internal static class TooltipInject
     }
 
     /// <summary>
-    /// Rebuild the cooperative details for the item still under the pointer and replace the current
-    /// tooltip body in-place. Called by soft-dependent providers after asynchronous data becomes ready.
+    /// Rebuild the cooperative details for the latest inventory tooltip target and replace the body in-place.
+    /// The target survives pointer-exit because SpiritVale can emit exit while the tooltip remains visible.
     /// </summary>
     internal static bool RefreshCurrentExternal()
     {
