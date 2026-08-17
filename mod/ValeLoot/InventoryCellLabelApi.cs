@@ -75,7 +75,7 @@ internal static class InventoryCellLabel
 
     private const string Marker = "\u200b<color=#facc15>";
     private static readonly string[] GameAssemblies = { "Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll" };
-    private static readonly List<object> Detours = new();
+    private static readonly List<object> DetourHandles = new();
     private static readonly List<Delegate> Hooks = new();
     private static readonly List<Delegate?> Originals = new();
     private static readonly Dictionary<IntPtr, DateTime> RecentlyDrawn = new();
@@ -151,7 +151,7 @@ internal static class InventoryCellLabel
                         Draw0Fn hook = (self, mi) => Draw0(index, self, mi);
                         Hooks.Add(hook);
                         Originals.Add(null);
-                        Detours.Add(DetoursHelper(draw.NativePtr, hook, out Draw0Fn? original));
+                        DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw0Fn? original));
                         Originals[index] = original;
                         hooked++;
                         break;
@@ -161,7 +161,7 @@ internal static class InventoryCellLabel
                         Draw1Fn hook = (self, a0, mi) => Draw1(index, self, a0, mi);
                         Hooks.Add(hook);
                         Originals.Add(null);
-                        Detours.Add(DetoursHelper(draw.NativePtr, hook, out Draw1Fn? original));
+                        DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw1Fn? original));
                         Originals[index] = original;
                         hooked++;
                         break;
@@ -171,7 +171,7 @@ internal static class InventoryCellLabel
                         Draw2Fn hook = (self, a0, a1, mi) => Draw2(index, self, a0, a1, mi);
                         Hooks.Add(hook);
                         Originals.Add(null);
-                        Detours.Add(DetoursHelper(draw.NativePtr, hook, out Draw2Fn? original));
+                        DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw2Fn? original));
                         Originals[index] = original;
                         hooked++;
                         break;
@@ -181,7 +181,7 @@ internal static class InventoryCellLabel
                         Draw3Fn hook = (self, a0, a1, a2, mi) => Draw3(index, self, a0, a1, a2, mi);
                         Hooks.Add(hook);
                         Originals.Add(null);
-                        Detours.Add(DetoursHelper(draw.NativePtr, hook, out Draw3Fn? original));
+                        DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw3Fn? original));
                         Originals[index] = original;
                         hooked++;
                         break;
@@ -198,8 +198,8 @@ internal static class InventoryCellLabel
         return _installed;
     }
 
-    private static object DetoursHelper<T>(IntPtr target, T hook, out T? original) where T : Delegate
-        => Detours.Apply(target, hook, out original);
+    private static object ApplyDetour<T>(IntPtr target, T hook, out T? original) where T : Delegate
+        => ValeLoot.Detours.Apply(target, hook, out original);
 
     private static bool PointerAbiOnly(string[] types)
     {
