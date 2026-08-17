@@ -74,9 +74,8 @@ internal static class InventoryCellLabel
     private static readonly Dictionary<IntPtr, bool> BaseActiveByCell = new();
     private static readonly List<IntPtr> Sweep = new();
 
-    // A page/tab redraw emits a tight burst of UIInventoryItem.Draw calls. Only cells whose GameObjects are
-    // actually active in the hierarchy participate. SpiritVale also redraws cells belonging to hidden tabs;
-    // allowing those cells into the queue made background market lookups spend time on unrelated items.
+    // Keep all recently drawn backpack/listing cells eligible. SpiritVale retains cells from other tabs, and
+    // those are legitimate bag items whose 10-minute market cache should be warmed too.
     private static DateTime _latestDrawUtc;
     private static readonly TimeSpan CurrentPageBurstWindow = TimeSpan.FromMilliseconds(750);
 
@@ -89,7 +88,6 @@ internal static class InventoryCellLabel
     private static PtrFn? _getText;
     private static SetTextFn? _setText;
     private static BoolFn? _getActiveSelf;
-    private static BoolFn? _getActiveInHierarchy;
     private static BoolSetFn? _setActive;
     private static IntPtr _tmpType;
     private static bool _installed;
@@ -121,13 +119,11 @@ internal static class InventoryCellLabel
         Il2CppMeta.MethodInfo? getText = Il2CppMeta.FindOverload(tmp, "get_text");
         Il2CppMeta.MethodInfo? setText = Il2CppMeta.FindOverload(tmp, "set_text", "System.String");
         Il2CppMeta.MethodInfo? getActiveSelf = Il2CppMeta.FindOverload(gameObject, "get_activeSelf");
-        Il2CppMeta.MethodInfo? getActiveInHierarchy = Il2CppMeta.FindOverload(gameObject, "get_activeInHierarchy");
         Il2CppMeta.MethodInfo? setActive = Il2CppMeta.FindOverload(gameObject, "SetActive", "System.Boolean");
 
         if (cellClass == IntPtr.Zero || tmp == IntPtr.Zero || getTransform is null || getGameObject is null
             || getChildCount is null || getChild is null || getName is null || getComponent is null
-            || getText is null || setText is null || getActiveSelf is null || getActiveInHierarchy is null
-            || setActive is null)
+            || getText is null || setText is null || getActiveSelf is null || setActive is null)
         {
             Status = "inventory-cell label unavailable: UI/TMP/GameObject accessors did not resolve";
             return false;
@@ -142,7 +138,6 @@ internal static class InventoryCellLabel
         _getText = Marshal.GetDelegateForFunctionPointer<PtrFn>(getText.NativePtr);
         _setText = Marshal.GetDelegateForFunctionPointer<SetTextFn>(setText.NativePtr);
         _getActiveSelf = Marshal.GetDelegateForFunctionPointer<BoolFn>(getActiveSelf.NativePtr);
-        _getActiveInHierarchy = Marshal.GetDelegateForFunctionPointer<BoolFn>(getActiveInHierarchy.NativePtr);
         _setActive = Marshal.GetDelegateForFunctionPointer<BoolSetFn>(setActive.NativePtr);
         _tmpType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(tmp));
 
@@ -194,7 +189,7 @@ internal static class InventoryCellLabel
         _installed = hooked > 0;
         Status = _installed
             ? $"ready: {hooked} UIInventoryItem.Draw body/bodies; bottom-right Count label; "
-              + "active-in-hierarchy current-page targeting; inactive equipment Count objects enabled only while priced"
+              + "all recently drawn tabs eligible; inline count + market price; inactive equipment Count objects enabled only while priced"
             : "inventory-cell label unavailable: no pointer-safe UIInventoryItem.Draw overload resolved";
         return _installed;
     }
@@ -217,8 +212,6 @@ internal static class InventoryCellLabel
         return true;
     }
 
-    // Restore our prior mutation BEFORE SpiritVale redraws a pooled cell. That gives the game the original
-    // Count active/text state to work from and prevents a price label from leaking onto the next bound item.
     private static void Draw0(int i, IntPtr self, IntPtr mi)
     {
         RestoreBeforeDraw(self); (Originals[i] as Draw0Fn)?.Invoke(self, mi); Touch(self);
@@ -254,22 +247,11 @@ internal static class InventoryCellLabel
 
     private static void Touch(IntPtr cell)
     {
-        if (cell == IntPtr.Zero || !IsCellVisible(cell)) return;
+        if (cell == IntPtr.Zero) return;
         DateTime now = DateTime.UtcNow;
         RecentlyDrawn[cell] = now;
         _latestDrawUtc = now;
         Apply(cell);
-    }
-
-    private static bool IsCellVisible(IntPtr cell)
-    {
-        if (cell == IntPtr.Zero || _getGameObject is null || _getActiveInHierarchy is null) return false;
-        try
-        {
-            IntPtr go = _getGameObject(cell, IntPtr.Zero);
-            return go != IntPtr.Zero && _getActiveInHierarchy(go, IntPtr.Zero);
-        }
-        catch { return false; }
     }
 
     public static bool RefreshVisible()
@@ -283,7 +265,7 @@ internal static class InventoryCellLabel
         foreach ((IntPtr cell, DateTime last) in RecentlyDrawn)
         {
             if (last < garbageCutoff) { Sweep.Add(cell); continue; }
-            if (last < currentPageCutoff || !IsCellVisible(cell)) continue;
+            if (last < currentPageCutoff) continue;
             Apply(cell);
             any = true;
         }
@@ -301,8 +283,7 @@ internal static class InventoryCellLabel
 
     private static void Apply(IntPtr cell)
     {
-        if (_setText is null || _getText is null || _getActiveSelf is null || _setActive is null
-            || !IsCellVisible(cell)) return;
+        if (_setText is null || _getText is null || _getActiveSelf is null || _setActive is null) return;
         try
         {
             IntPtr text = ResolveCountText(cell);
@@ -339,7 +320,9 @@ internal static class InventoryCellLabel
             if (shouldForceActive)
             {
                 string price = $"{Marker}<size=72%><b>{label!.Trim()}</b></color></size>";
-                desired = string.IsNullOrWhiteSpace(baseText) ? price : baseText + "\n" + price;
+                // The Count TMP rect is only one line high on these cells. A second line is clipped. Keep the
+                // game's quantity and the compact market price on the same bottom-right line instead.
+                desired = string.IsNullOrWhiteSpace(baseText) ? price : baseText + "  " + price;
             }
 
             if (!string.Equals(current, desired, StringComparison.Ordinal))
