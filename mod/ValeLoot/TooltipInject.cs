@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Il2CppInterop.Runtime;
 
@@ -36,13 +37,17 @@ internal static class TooltipInject
     private static volatile int _pendingMinChars = MinTooltipChars;
     private static bool _writing;
 
-    // Pointer-enter capture state. SpiritVale writes several unrelated TMP_Text objects on the character
-    // inventory screen. We only consider writes that look like the actual item tooltip, then choose the
-    // strongest/longest candidate from that set.
+    // Pointer-enter capture state. SpiritVale can write several unrelated TMP_Text objects during one hover.
+    // Do not hard-filter by content: the visible item tooltip is assembled from several TMP objects and the
+    // body text does not consistently contain labels such as Weight:. We restore the proven longest-write
+    // behavior and trace the first few hover candidates so the final target can be identified from evidence.
     private static bool _capturingEnter;
     private static IntPtr _candidateText;
     private static string? _candidateBaseText;
-    private static int _candidateScore;
+    private static readonly List<string> _candidateTrace = new();
+    private static int _traceHoversRemaining = 10;
+    private static bool _traceThisHover;
+    private static int _traceHoverNumber;
 
     // Cooperative async refresh state. The base text never contains ValeLoot/provider additions, so a
     // later refresh REPLACES "Checking..." instead of appending a second market block underneath it.
@@ -110,8 +115,8 @@ internal static class TooltipInject
 
             Installed = true;
             log($"tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x{_dataFieldOffset:x}, "
-              + $"floors {MinTooltipChars}/{MinExternalTooltipChars} chars, item-tooltip marker targeting, "
-              + "async refresh retains last valid target across pointer-exit)");
+              + $"floors {MinTooltipChars}/{MinExternalTooltipChars} chars, longest-write targeting restored, "
+              + "candidate tracing enabled, async refresh retains last valid target across pointer-exit)");
         }
         catch (Exception e)
         {
@@ -131,7 +136,7 @@ internal static class TooltipInject
         _capturingEnter = false;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
-        _candidateScore = 0;
+        _candidateTrace.Clear();
         _currentHandler = IntPtr.Zero;
         _currentText = IntPtr.Zero;
         _currentBaseText = null;
@@ -144,8 +149,14 @@ internal static class TooltipInject
         _currentBaseText = null;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
-        _candidateScore = 0;
         _refreshMissReported = false;
+
+        _traceThisHover = _traceHoversRemaining > 0;
+        if (_traceThisHover)
+        {
+            _traceHoverNumber++;
+            _candidateTrace.Clear();
+        }
 
         if (Enabled && self != IntPtr.Zero)
         {
@@ -161,6 +172,15 @@ internal static class TooltipInject
         finally
         {
             _capturingEnter = false;
+        }
+
+        if (_traceThisHover)
+        {
+            string selected = _candidateBaseText is null ? "none" : DescribeText(_candidateBaseText);
+            string candidates = _candidateTrace.Count == 0 ? "<none>" : string.Join(" || ", _candidateTrace);
+            _log?.Invoke($"tooltip candidate trace #{_traceHoverNumber}: capture candidates={candidates}; selected={selected}");
+            _traceHoversRemaining--;
+            _traceThisHover = false;
         }
 
         // The AH response can occasionally complete during the game's own pointer-enter. Rebuild here so
@@ -228,9 +248,7 @@ internal static class TooltipInject
         }
 
         string incoming = Il2CppMeta.ReadString(value) ?? "";
-        if (incoming.Length < _pendingMinChars
-            || incoming.Contains(Marker, StringComparison.Ordinal)
-            || !LooksLikeItemTooltip(incoming))
+        if (incoming.Length < _pendingMinChars || incoming.Contains(Marker, StringComparison.Ordinal))
         {
             _setTextOriginal?.Invoke(self, value, methodInfo);
             return;
@@ -238,40 +256,31 @@ internal static class TooltipInject
 
         if (_capturingEnter)
         {
-            // Keep the game's write untouched for now. Among writes that actually look like item tooltips,
-            // prefer the richest candidate rather than the longest arbitrary text on the whole screen.
             _setTextOriginal?.Invoke(self, value, methodInfo);
-            int score = TooltipScore(incoming);
-            if (_candidateBaseText is null || score > _candidateScore)
+            if (_traceThisHover && _candidateTrace.Count < 12)
+                _candidateTrace.Add(DescribeText(incoming));
+
+            if (_candidateBaseText is null || incoming.Length > _candidateBaseText.Length)
             {
                 _candidateText = self;
                 _candidateBaseText = incoming;
-                _candidateScore = score;
             }
             return;
         }
 
         // Compatibility fallback for a client that performs the tooltip write after OnPointerEnter returns.
+        if (_traceHoversRemaining > 0)
+            _log?.Invoke("tooltip candidate trace post-enter fallback: " + DescribeText(incoming));
         CommitDirect(self, incoming, pending, methodInfo);
     }
 
-    private static bool LooksLikeItemTooltip(string text)
+    private static string DescribeText(string text)
     {
-        // Every normal SpiritVale item tooltip observed so far (gear, artifact, card, gem, consumable, junk)
-        // contains the Weight label. Requiring it prevents inventory/character-panel text writes from stealing
-        // ValeLoot's pending payload. Additional markers improve confidence without excluding short items.
-        return text.Contains("Weight:", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int TooltipScore(string text)
-    {
-        int score = text.Length;
-        if (text.Contains("Weight:", StringComparison.OrdinalIgnoreCase)) score += 100_000;
-        if (text.Contains("Cards:", StringComparison.OrdinalIgnoreCase)) score += 10_000;
-        if (text.Contains("Gems:", StringComparison.OrdinalIgnoreCase)) score += 10_000;
-        if (text.Contains("Double-click to Use", StringComparison.OrdinalIgnoreCase)) score += 5_000;
-        if (text.Contains("Hold [LShift]", StringComparison.OrdinalIgnoreCase)) score += 5_000;
-        return score;
+        string flat = text.Replace('\r', ' ').Replace('\n', ' ');
+        if (flat.Length > 180) flat = flat[..180] + "…";
+        return $"len={text.Length}, weight={text.Contains("Weight:", StringComparison.OrdinalIgnoreCase)}, "
+             + $"cards={text.Contains("Cards:", StringComparison.OrdinalIgnoreCase)}, "
+             + $"gems={text.Contains("Gems:", StringComparison.OrdinalIgnoreCase)}, text='{flat}'";
     }
 
     private static void CommitCandidate()
@@ -284,7 +293,6 @@ internal static class TooltipInject
         string baseText = _candidateBaseText;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
-        _candidateScore = 0;
         CommitDirect(text, baseText, pending, IntPtr.Zero);
     }
 
