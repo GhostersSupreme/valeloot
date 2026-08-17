@@ -96,8 +96,7 @@ internal static class BagFillIndicator
     {
         _log = log;
         Enabled = enabled;
-        YellowPercent = yellowPercent < 1 ? 1 : yellowPercent > 98 ? 98 : yellowPercent;
-        RedPercent = redPercent <= YellowPercent ? YellowPercent + 1 : redPercent > 99 ? 99 : redPercent;
+        ConfigureThresholds(yellowPercent, redPercent);
         TintStrength = tintStrength < 0.1f ? 0.1f : tintStrength > 1f ? 1f : tintStrength;
 
         if (!Enabled)
@@ -169,6 +168,24 @@ internal static class BagFillIndicator
         Installed = true;
         log($"bag fill indicator ready (yellow above {YellowPercent}%, red above {RedPercent}%, tint strength {TintStrength:0.00}); waiting for the HUD inventory button");
         return true;
+    }
+
+    /// <summary>
+    /// Apply the two user-facing warning cutoffs without reinstalling any native bindings.
+    ///
+    /// The editor writes these values into BepInEx's config file first, then calls here. Invalid
+    /// hand-edited config is still bounded at startup, and invalid editor requests are refused by
+    /// <see cref="EditorServer"/> rather than silently changed.
+    /// </summary>
+    public static void ConfigureThresholds(int yellowPercent, int redPercent)
+    {
+        YellowPercent = yellowPercent < 1 ? 1 : yellowPercent > 98 ? 98 : yellowPercent;
+        RedPercent = redPercent <= YellowPercent ? YellowPercent + 1 : redPercent > 99 ? 99 : redPercent;
+
+        // A threshold change matters even when carried weight did not. Force the next throttled tick
+        // through UpdateVisual instead of letting the unchanged weight/limit fast path hide the edit.
+        _lastCurrent = int.MinValue;
+        _lastLimit = int.MinValue;
     }
 
     public static void Tick(IntPtr playerSave)

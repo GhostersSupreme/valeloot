@@ -150,6 +150,27 @@ main{flex:1;display:grid;grid-template-columns:360px minmax(420px,1fr) 360px;min
 .tally b{color:var(--ink);font-weight:600}
 .tally .lit b{color:var(--gold)}
 .tally s{text-decoration:none;color:var(--line2)}
+.stagehead .bagwarn{margin-left:auto;white-space:nowrap}
+.bagsettings{width:min(440px,calc(100vw - 32px));padding:0;color:var(--ink);background:var(--panel);
+  border:1px solid var(--gold-dim);border-radius:6px;box-shadow:0 24px 70px rgba(0,0,0,.78)}
+.bagsettings::backdrop{background:rgba(4,7,6,.78);backdrop-filter:blur(2px)}
+.bagsettings form{padding:18px}
+.bagsettings h3{margin:0 0 5px;color:var(--gold);font-size:15px;letter-spacing:1.4px;text-transform:uppercase}
+.bagsettings p{margin:0 0 15px;color:var(--dim);font-size:12.5px;line-height:1.55}
+.bagsettings .thresholds{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bagsettings label{display:flex;flex-direction:column;gap:5px;color:var(--faint);font:10.5px var(--mono);
+  letter-spacing:.7px;text-transform:uppercase}
+.bagsettings .number{display:flex;align-items:center;gap:6px;padding:7px 9px;background:var(--sunk);
+  border:1px solid var(--line2);border-radius:4px;color:var(--dim);font:13px var(--mono)}
+.bagsettings input{min-width:0;width:100%;padding:0;background:transparent;color:var(--ink);border:0;
+  font:15px var(--mono)}
+.bagsettings input:focus{outline:0}
+.bagsettings .number:focus-within{border-color:var(--gold)}
+.bagsettings .disabled{margin:12px 0 0;padding:8px 10px;border-left:2px solid var(--warn);
+  background:rgba(224,167,46,.06);color:var(--warn)}
+.bagsettings .persist{margin:13px 0 0;color:var(--faint);font-size:11.5px}
+.bagsettings .error{min-height:20px;margin-top:7px;color:var(--bad);font-size:11.5px}
+.bagsettings .actions{display:flex;justify-content:flex-end;gap:7px;margin-top:6px}
 /**
  * The find box, above the grid.
  *
@@ -597,6 +618,7 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
     <div class="stagehead">
       <h2>your bag, as the filter paints it</h2>
       <div class="tally" id="tally"></div>
+      <button class="btn tiny bagwarn" id="bag-settings-open" title="set the HUD carried-weight warning thresholds" hidden>HUD weight warning</button>
     </div>
     <div class="bagfind">
       <input id="bagfind" type="search" placeholder="find in bag — name, type or id" autocomplete="off" spellcheck="false">
@@ -608,6 +630,32 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
   </section>
   <aside id="act" aria-label="item match inspector"></aside>
 </main>
+<dialog class="bagsettings" id="bag-settings" aria-labelledby="bag-settings-title">
+  <form id="bag-settings-form">
+    <h3 id="bag-settings-title">HUD bag weight warning</h3>
+    <p>The inventory button stays unchanged below the first cutoff, turns yellow above it, then red
+      above the second.</p>
+    <div class="thresholds">
+      <label>Yellow above
+        <span class="number"><input id="bag-yellow" name="yellowPercent" type="number" min="1" max="98"
+          step="1" inputmode="numeric" required><span>%</span></span>
+      </label>
+      <label>Red above
+        <span class="number"><input id="bag-red" name="redPercent" type="number" min="2" max="99"
+          step="1" inputmode="numeric" required><span>%</span></span>
+      </label>
+    </div>
+    <p class="disabled" id="bag-settings-disabled" hidden>The bag indicator is disabled in
+      <code>com.savi.valeloot.cfg</code>. These cutoffs will be ready if you enable it.</p>
+    <p class="persist">Saved in <code>BepInEx/config/com.savi.valeloot.cfg</code>, outside the plugin
+      folder, so an upgrade keeps your values.</p>
+    <div class="error" id="bag-settings-error" role="status" aria-live="polite"></div>
+    <div class="actions">
+      <button class="btn" id="bag-settings-cancel" type="button">cancel</button>
+      <button class="btn save" id="bag-settings-save" type="submit">Save thresholds</button>
+    </div>
+  </form>
+</dialog>
 
 <!--
   `#conn` is the connection disclosure, and it lives here on purpose.
@@ -1755,6 +1803,7 @@ let expectations = loadExpectations();
 let profiles = [];
 let focusRule = null;          // where the keyboard should land after a reorder
 let fileState = { filter: null, items: null, bag: null };
+let bagSettings = { enabled: true, yellowPercent: 60, redPercent: 80 };
 
 const src = $('src');
 /** What is typed in the bag's find box. Presentation only — never saved, never part of a rule. */
@@ -3189,6 +3238,7 @@ const STATE_URL = 'api/state';
 const FILTER_URL = 'api/filter';
 const PROFILES_URL = 'api/profiles';
 const HISTORY_URL = 'api/history';
+const SETTINGS_URL = 'api/settings';
 
 /**
  * Which mode, decided ONCE, by asking rather than by guessing.
@@ -3277,6 +3327,14 @@ function applyState(state, keepText) {
   // The .wav files the mod can actually see. Null in file mode, where this page has no way to look
   // in the folder and the five synthesised built-ins are the honest best guess.
   served.sounds = Array.isArray(state.sounds) && state.sounds.length ? state.sounds.slice() : null;
+  const indicator = state.bagIndicator || {};
+  const yellow = Number(indicator.yellowPercent);
+  const red = Number(indicator.redPercent);
+  if (Number.isInteger(yellow) && yellow >= 1 && yellow <= 98
+      && Number.isInteger(red) && red >= 2 && red <= 99 && yellow < red) {
+    bagSettings = { enabled: indicator.enabled !== false, yellowPercent: yellow, redPercent: red };
+    renderBagSettings(false);
+  }
   profiles = Array.isArray(state.profiles) ? state.profiles.map((entry) => ({
     name: String(entry.name || ''), active: entry.active === true,
   })).filter((entry) => entry.name) : [];
@@ -3455,6 +3513,86 @@ async function saveToMod() {
   }
 }
 
+function renderBagSettings(forceInputs) {
+  const button = $('bag-settings-open');
+  button.textContent = 'HUD weight ' + bagSettings.yellowPercent + '% / ' + bagSettings.redPercent + '%';
+  button.title = 'yellow above ' + bagSettings.yellowPercent + '%, red above ' + bagSettings.redPercent
+    + '% — saved across upgrades';
+  $('bag-settings-disabled').hidden = bagSettings.enabled;
+  if (forceInputs || !$('bag-settings').open) {
+    $('bag-yellow').value = String(bagSettings.yellowPercent);
+    $('bag-red').value = String(bagSettings.redPercent);
+  }
+}
+
+function openBagSettings() {
+  renderBagSettings(true);
+  $('bag-settings-error').textContent = '';
+  $('bag-settings').showModal();
+  $('bag-yellow').focus();
+  $('bag-yellow').select();
+}
+
+async function saveBagSettings(event) {
+  event.preventDefault();
+  const yellow = Number($('bag-yellow').value);
+  const red = Number($('bag-red').value);
+  const error = $('bag-settings-error');
+  if (!Number.isInteger(yellow) || yellow < 1 || yellow > 98) {
+    error.textContent = 'Yellow must be a whole percentage from 1 to 98.';
+    $('bag-yellow').focus();
+    return;
+  }
+  if (!Number.isInteger(red) || red < 2 || red > 99) {
+    error.textContent = 'Red must be a whole percentage from 2 to 99.';
+    $('bag-red').focus();
+    return;
+  }
+  if (yellow >= red) {
+    error.textContent = 'Red must be greater than yellow.';
+    $('bag-red').focus();
+    return;
+  }
+
+  const button = $('bag-settings-save');
+  button.disabled = true;
+  error.textContent = 'saving\u2026';
+  const params = new URLSearchParams({
+    yellowPercent: String(yellow),
+    redPercent: String(red),
+  });
+  let response;
+  try {
+    response = await fetch(SETTINGS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8' },
+      body: params.toString(),
+      cache: 'no-store',
+    });
+  } catch (requestError) {
+    const reason = requestError && requestError.message ? requestError.message : String(requestError);
+    error.textContent = 'ValeLoot stopped answering: ' + reason;
+    button.disabled = false;
+    loseConnection(reason);
+    return;
+  }
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body || body.ok !== true) {
+    error.textContent = body && body.error ? String(body.error)
+      : 'the mod answered ' + response.status + ' ' + response.statusText;
+    button.disabled = false;
+    return;
+  }
+
+  bagSettings = { enabled: bagSettings.enabled, yellowPercent: yellow, redPercent: red };
+  renderBagSettings(true);
+  button.disabled = false;
+  $('bag-settings').close();
+  say('Saved the HUD bag warning: yellow above ' + yellow + '%, red above ' + red
+    + '%. It is live now and stored in com.savi.valeloot.cfg, so upgrades keep it.', false, true);
+}
+
 function renderProfiles() {
   const bar = $('profilebar');
   bar.hidden = mode !== 'served' || !profiles.length;
@@ -3559,6 +3697,8 @@ function applyModeChrome() {
     ? 'pull a fresh bag and rules from the game — do this after looting'
     : 'refresh all three files from the folder';
   $('history-open').hidden = !servedNow;
+  $('bag-settings-open').hidden = !servedNow;
+  if (!servedNow && $('bag-settings').open) $('bag-settings').close();
   if (!servedNow) $('history').classList.remove('on');
 }
 
@@ -4215,6 +4355,9 @@ src.addEventListener('keydown', (event) => {
 $('save').addEventListener('click', saveFilter);
 $('download').addEventListener('click', downloadText);
 $('reload').addEventListener('click', reread);
+$('bag-settings-open').addEventListener('click', openBagSettings);
+$('bag-settings-cancel').addEventListener('click', () => $('bag-settings').close());
+$('bag-settings-form').addEventListener('submit', saveBagSettings);
 $('profile').addEventListener('change', async (event) => {
   try { await profileAction('activate', event.target.value); say('Activated profile ' + event.target.value + '.'); }
   catch (error) { say('Could not activate profile: ' + error.message, true); renderProfiles(); }
@@ -4337,9 +4480,13 @@ $('helpbody').innerHTML = ''
   + 'rules, your bag and every item name come from the running game, and <b>Save</b> hands the text '
   + 'back for the mod to write. The footer says so, with the port, whenever that is what is '
   + 'happening.</p>'
-  + '<p>That server carries this page, your rules and your bag, and nothing else. It is not connected '
-  + 'to the game\u2019s own network traffic, reads no packets, and answers only to this machine. '
-  + 'Nothing you type here leaves it.</p>'
+  + '<p>That server carries this page, your rules, your bag and the bag-warning settings, and nothing '
+  + 'else. It is not connected to the game\u2019s own network traffic, reads no packets, and answers only '
+  + 'to this machine. Nothing you type here leaves it.</p>'
+  + '<h3>Bag weight warning</h3>'
+  + '<p>The <b>HUD weight</b> control above your bag sets when the game\u2019s inventory button turns '
+  + 'yellow and red. It is available when this page is opened with F8, applies immediately, and saves '
+  + 'to <code>com.savi.valeloot.cfg</code>, so replacing the plugin during an upgrade does not reset it.</p>'
   + '<p>The other way is to open the file by hand, which is what you are doing if you were asked for '
   + 'a folder. That still works, offline, with the game shut, and it is the fallback if something on '
   + 'your machine has taken the port.</p>'
@@ -4416,6 +4563,7 @@ window.ValeLootEditor = {
     text: src.value,
     mode,
     served: { port: served.port, version: served.version, lost: served.lost, coverage: served.coverage },
+    bagIndicator: { ...bagSettings },
     gate: $('gate').style.display !== 'none',
     errors: plan.errors,
     rules: plan.blocks.map((b, i) => ({

@@ -324,6 +324,8 @@ already knows your bag, your rules and the game's item catalog.
 - **Session pickup alerts** list every pickup decision, including stack quantity, matched rule/tag,
   silent outcomes, and which item won a simultaneous batch's single sound. Clear it from the panel;
   it is bounded in memory and never persisted.
+- The **HUD weight** control sets the yellow and red carried-weight warnings immediately. It writes
+  `BepInEx/config/com.savi.valeloot.cfg`, so replacing the plugin during an upgrade keeps both values.
 
 Saving writes the active profile through `valeloot-filter.txt`; your bag recolours on the next inventory redraw.
 
@@ -332,8 +334,9 @@ Saving writes the active profile through `valeloot-filter.txt`; your bag recolou
 The editor is served from the mod over loopback, on `http://127.0.0.1:38512/`.
 
 - It binds **`127.0.0.1` only**. It is reachable from this machine and from nothing else.
-- It serves seven fixed routes: its embedded editor page, a state snapshot, filter saving, local profile
-  management, session alert history, sound previews for your own `.wav` files, and a health check.
+- It serves eight fixed routes: its embedded editor page, a state snapshot, filter saving, local profile
+  management, session alert history, bag-warning settings, sound previews for your own `.wav` files,
+  and a health check.
 - It carries **no game traffic**, and there is no network hook anywhere in the plugin.
 - Every request stays on `127.0.0.1` between the game and your browser. There is no outbound communication.
 - Turn it off with `Enabled = false` under `[Editor]` in `BepInEx/config/com.savi.valeloot.cfg`. No port is
@@ -352,8 +355,8 @@ The editor is served from the mod over loopback, on `http://127.0.0.1:38512/`.
 | `Highlight / HoverNote` | `true` | The tooltip line naming the matched rule. |
 | `Sound / Enabled` | `true` | Sounds on pickup. |
 | `Bag Indicator / Enabled` | `true` | Tint the HUD inventory button yellow or red as carried weight rises. |
-| `Bag Indicator / YellowPercent` | `60` | Percentage above which the button turns yellow. |
-| `Bag Indicator / RedPercent` | `80` | Percentage above which the button turns red. |
+| `Bag Indicator / YellowPercent` | `60` | Percentage above which the button turns yellow. Settable from the editor's **HUD weight** control. |
+| `Bag Indicator / RedPercent` | `80` | Percentage above which the button turns red. Settable from the editor's **HUD weight** control. |
 | `Bag Indicator / TintStrength` | `0.85` | Yellow/red warning-tint strength, from `0.10` to `1.00`. |
 | `Editor / Enabled` | `true` | The loopback editor server. |
 | `Editor / Port` | `38512` | Its port. |

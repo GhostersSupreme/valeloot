@@ -66,9 +66,9 @@ the whole truth about it, in one place, because it is the thing you would most w
 * It listens on 127.0.0.1:38512 and nothing else. Not 0.0.0.0, not your LAN address, not your Wi-Fi.
   127.0.0.1 is your own machine talking to itself; a request from anywhere else cannot arrive, and one
   that tries is refused before it is read.
-* It serves seven fixed routes: ValeLoot's embedded editor page, a state snapshot of YOUR rules, YOUR
-  bag and the game's item list, filter saving, local profile management, session alert history, sound
-  previews for your own .wav files, and a health check so the page can verify that the mod is serving it.
+* It serves eight fixed routes: ValeLoot's embedded editor page; a state snapshot of YOUR rules, YOUR
+  bag and the game's item list; filter saving; local profile management; session alert history;
+  bag-warning settings; sound previews for your own .wav files; and a health check.
 * It carries no game traffic. It is not attached to the game's connection in any way, sees no game
   packet, and contains no packet capture. That distinction is the point: it is a local web page for a
   text file, not a window onto the game's network.
@@ -290,6 +290,10 @@ On the first upgraded run, an existing valeloot-filter.txt becomes the Default p
 The alerts button shows every pickup decision from this game session: item and quantity, matched
 rule/tag, silent outcomes, and which item supplied the one sound when several items arrived together.
 Clear it whenever you like. The list is bounded in memory and is never written to disk.
+
+The HUD WEIGHT control above the bag sets the yellow and red carried-weight warning thresholds. They
+apply immediately and are saved in BepInEx/config/com.savi.valeloot.cfg, outside the plugin folder, so
+replacing the plugin during an upgrade keeps them.
 
 The same editor, without the game running
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -584,8 +588,10 @@ BepInEx/config/com.savi.valeloot.cfg, written on first run with every option doc
   [Bag Indicator] Enabled          true     Tint the HUD inventory button yellow or red as carried
                                             weight rises.
   [Bag Indicator] YellowPercent      60     Percentage above which the button turns yellow (1-98).
+                                            Settable from the editor's HUD WEIGHT control.
   [Bag Indicator] RedPercent         80     Percentage above which the button turns red; must exceed
-                                            YellowPercent (2-99).
+                                            YellowPercent (2-99). Settable from the editor's HUD
+                                            WEIGHT control.
   [Bag Indicator] TintStrength      0.85    Yellow/red warning-tint strength (0.10-1.00).
   [Editor]    Enabled     true     The editor server. false opens no port at all - see THE ONE PORT
                                    IT OPENS above.

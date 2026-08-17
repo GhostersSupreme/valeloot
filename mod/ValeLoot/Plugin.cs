@@ -21,10 +21,11 @@ namespace ValeLoot;
 /// needs a listener, so this plugin HAS one, and the honest version of the old claim is:
 ///
 /// It binds **127.0.0.1 only** — never `0.0.0.0`, never a LAN interface — so nothing off this machine
-/// can reach it. It serves seven fixed routes and no others: its own editor page; JSON snapshots of
-/// your rules, bag, catalog, profiles, and session alert history; filter/profile writes; sound
-/// previews; and a health probe. It carries **no game traffic**, hooks nothing on the game's network
-/// path, and contains **no packet capture** — there is no code here that could observe a game packet. Nothing
+/// can reach it. It serves eight fixed routes and no others: its own editor page; JSON snapshots of
+/// your rules, bag, catalog, profiles, session alert history, and bag-warning settings;
+/// filter/profile/settings writes; sound previews; and a health probe. It carries **no game traffic**,
+/// hooks nothing on the game's network path, and contains **no packet capture** — there is no code here
+/// that could observe a game packet. Nothing
 /// leaves your machine: there is no outbound request anywhere in the plugin. `Editor/Enabled = false`
 /// turns it off, and everything else keeps working. See <see cref="EditorServer"/>.
 ///
@@ -235,7 +236,43 @@ public sealed class Plugin : BasePlugin
          * to read a README to find it.
          */
         EditorServer.Install(Paths.ConfigPath, _editor.Value, _editorPort.Value, _editorHotkey.Value,
-                             m => Log.LogInfo(m));
+                             SaveBagThresholds, m => Log.LogInfo(m));
+    }
+
+    /// <summary>
+    /// Persist editor-written warning cutoffs in BepInEx's config directory, which plugin upgrades
+    /// do not replace, then make them live without a restart.
+    /// </summary>
+    private void SaveBagThresholds(int yellowPercent, int redPercent)
+    {
+        if (_bagYellowPercent is null || _bagRedPercent is null)
+            throw new InvalidOperationException("bag indicator settings are unavailable");
+
+        int previousYellow = _bagYellowPercent.Value;
+        int previousRed = _bagRedPercent.Value;
+        bool saveOnSet = Config.SaveOnConfigSet;
+        try
+        {
+            // One config write for the pair. A half-written pair would violate yellow < red on the
+            // next launch, so automatic per-entry saves are suspended until both values are present.
+            Config.SaveOnConfigSet = false;
+            _bagYellowPercent.Value = yellowPercent;
+            _bagRedPercent.Value = redPercent;
+            Config.Save();
+        }
+        catch
+        {
+            _bagYellowPercent.Value = previousYellow;
+            _bagRedPercent.Value = previousRed;
+            throw;
+        }
+        finally
+        {
+            Config.SaveOnConfigSet = saveOnSet;
+        }
+
+        BagFillIndicator.ConfigureThresholds(yellowPercent, redPercent);
+        Log.LogInfo($"bag fill indicator thresholds saved (yellow above {yellowPercent}%, red above {redPercent}%)");
     }
 
     public override bool Unload()

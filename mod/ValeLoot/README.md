@@ -61,9 +61,9 @@ the whole truth about it, in one place, because it is the thing you would most w
 - **It listens on `127.0.0.1:38512` and nothing else.** Not `0.0.0.0`, not your LAN address, not your
   Wi-Fi. `127.0.0.1` is your own machine talking to itself; a request from anywhere else cannot
   arrive, and one that tries is refused before it is read.
-- **It serves five routes:** ValeLoot's embedded editor page, a state snapshot of *your* rules, *your*
-  bag and the game's item list, a save endpoint that writes *your* rule file, a sound preview for your
-  own `.wav` files, and a health check so the page can verify that the mod is serving it.
+- **It serves eight routes:** ValeLoot's embedded editor page; a state snapshot of *your* rules,
+  *your* bag and the game's item list; filter saving; local profile management; session alert history;
+  bag-warning settings; sound previews for your own `.wav` files; and a health check.
 - **It carries no game traffic.** It is not attached to the game's connection in any way, sees no game
   packet, and contains no packet capture. That distinction is the point: it is a local web page for a
   text file, not a window onto the game's network.
@@ -244,6 +244,10 @@ same items the highlight is painting, updated as you scroll. It also says how mu
 seen: the game hands the mod one page of cells at a time, so the count starts as the page you looked
 at and fills in as you scroll and switch tabs. A count that quietly described twelve items of a
 two-hundred-item bag would be worse than no count.
+
+The **HUD weight** control above the bag sets the yellow and red carried-weight warning thresholds.
+They apply immediately and are saved in `BepInEx/config/com.savi.valeloot.cfg`, outside the plugin
+folder, so replacing the plugin during an upgrade keeps them.
 
 ### The same editor, without the game running
 
@@ -509,8 +513,8 @@ Sound is Windows-only (it goes through `winmm`). Everything else works regardles
 | `Highlight` | `HoverNote` | `true` | The tooltip line naming the rule that claimed the item. |
 | `Sound` | `Enabled` | `true` | Sounds on picking up a match. |
 | `Bag Indicator` | `Enabled` | `true` | Tint the HUD inventory button yellow or red as carried weight rises. |
-| `Bag Indicator` | `YellowPercent` | `60` | Percentage above which the button turns yellow (1–98). |
-| `Bag Indicator` | `RedPercent` | `80` | Percentage above which the button turns red; must exceed `YellowPercent` (2–99). |
+| `Bag Indicator` | `YellowPercent` | `60` | Percentage above which the button turns yellow (1–98). Settable from the editor's **HUD weight** control. |
+| `Bag Indicator` | `RedPercent` | `80` | Percentage above which the button turns red; must exceed `YellowPercent` (2–99). Settable from the editor's **HUD weight** control. |
 | `Bag Indicator` | `TintStrength` | `0.85` | Yellow/red warning-tint strength (0.10–1.00). |
 | `Editor` | `Enabled` | `true` | The editor server. `false` opens no port at all — see [The one port it opens](#the-one-port-it-opens). |
 | `Editor` | `Port` | `38512` | The loopback port. Change it if something else has that one. |

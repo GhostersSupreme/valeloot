@@ -23,11 +23,12 @@ namespace ValeLoot;
 /// ## What this listener is, said plainly, because it is a socket
 ///
 /// It binds **127.0.0.1 only** — never `0.0.0.0`, never a LAN interface — so it is reachable from this
-/// machine and from nothing else. It answers seven fixed routes: its own embedded editor page; JSON
-/// snapshots of the player's rules, bag, catalog, profiles, and session alert history; filter/profile
-/// writes; sound previews; and a one-field health probe. It carries **no game traffic**, hooks nothing
-/// on the game's network path, and contains **no packet capture** — there is no code here that could observe a game
-/// packet. The maintainer's audit greps for the game's transport library, its manager type and its raw
+/// machine and from nothing else. It answers eight fixed routes: its own embedded editor page; JSON
+/// snapshots of the player's rules, bag, catalog, profiles, session alert history, and bag-warning
+/// settings; filter/profile/settings writes; sound previews; and a one-field health probe. It carries
+/// **no game traffic**, hooks nothing on the game's network path, and contains **no packet capture** —
+/// there is no code here that could observe a game packet. The maintainer's audit greps for the game's
+/// transport library, its manager type and its raw
 /// send calls; those terms are deliberately not spelled anywhere in this folder, including in this
 /// comment, so that the audit's only possible hit would be real code. Nothing leaves the machine:
 /// there is no outbound request anywhere in this file.
@@ -50,7 +51,7 @@ namespace ValeLoot;
 /// Everything it serves is captured on the MAIN thread, where the paint pass already gathered it for
 /// `valeloot-bag.txt` and `ItemCatalog`, and handed over as an immutable object graph that is swapped
 /// in by one reference assignment. The HTTP thread reads that one reference and serialises plain
-/// strings and ints. Its writes are limited to the player's rule/profile files and its fallback page.
+/// strings and ints. Its writes are limited to the player's rule/profile/config files and its fallback page.
 ///
 /// ## Threading, in one paragraph
 ///
@@ -112,6 +113,7 @@ internal static class EditorServer
     /// </summary>
     private static volatile Snapshot _snapshot = Snapshot.Empty;
     private static ProfileStore? _profiles;
+    private static Action<int, int>? _saveBagThresholds;
 
     // ---- the main-thread tick, and the hotkey it reads --------------------------------------------
 
@@ -148,13 +150,15 @@ internal static class EditorServer
      * off, must still leave a working way to edit rules. The listener is next, and its failure is one
      * log line. The tick is last, because it needs a URL to name in its own log line.
      */
-    public static void Install(string configDirectory, bool enabled, int port, string hotkey, Action<string> log)
+    public static void Install(string configDirectory, bool enabled, int port, string hotkey,
+                               Action<int, int> saveBagThresholds, Action<string> log)
     {
         _log = log;
         // Cleared before the serve thread can read it, so a re-Install after Uninstall serves again.
         _stopping = false;
         _port = port is >= 1 and <= 65535 ? port : DefaultPort;
         _profiles = new ProfileStore(FilterFile.Path);
+        _saveBagThresholds = saveBagThresholds;
         if (_port != port)
         {
             log($"editor Port {port} is not a port number; using {_port}.");
@@ -209,6 +213,7 @@ internal static class EditorServer
         Serving = false;
         _snapshot = Snapshot.Empty;
         _profiles = null;
+        _saveBagThresholds = null;
         _catalogGeneration = -1;
     }
 
@@ -381,7 +386,7 @@ internal static class EditorServer
      *    a foreign origin is refused outright rather than left to the browser to enforce — otherwise
      *    any tab the player has open could POST a new filter over theirs.
      *
-     * Then: exactly seven routes, and 404 for everything else. There is no directory serving here and
+     * Then: exactly eight routes, and 404 for everything else. There is no directory serving here and
      * no route path is ever joined to a filesystem root. Profile names and sound names are separately
      * validated before their own fixed directories are touched.
      */
@@ -488,9 +493,14 @@ internal static class EditorServer
                 MethodNotAllowed(context, "GET, DELETE");
                 return;
 
+            case "/api/settings":
+                if (method != "POST") { MethodNotAllowed(context, "POST"); return; }
+                SaveSettings(context);
+                return;
+
             default:
                 TrySend(context, 404, "application/json",
-                        Fail($"ValeLoot's editor serves /, /api/state, /api/filter, /api/profiles, /api/history, /api/sound and /api/health. No {route}."));
+                        Fail($"ValeLoot's editor serves /, /api/state, /api/filter, /api/profiles, /api/history, /api/settings, /api/sound and /api/health. No {route}."));
                 return;
         }
     }
@@ -566,6 +576,10 @@ internal static class EditorServer
         json.Append(",\"filterPath\":");
         Str(json, path);
         json.Append(",\"threshold\":").Append(snap.Threshold.ToString(CultureInfo.InvariantCulture));
+        json.Append(",\"bagIndicator\":{\"enabled\":").Append(BagFillIndicator.Enabled ? "true" : "false")
+            .Append(",\"yellowPercent\":").Append(BagFillIndicator.YellowPercent.ToString(CultureInfo.InvariantCulture))
+            .Append(",\"redPercent\":").Append(BagFillIndicator.RedPercent.ToString(CultureInfo.InvariantCulture))
+            .Append('}');
         AppendProfiles(json);
 
         json.Append(",\"catalog\":{\"ready\":").Append(snap.CatalogReady ? "true" : "false")
@@ -795,17 +809,9 @@ internal static class EditorServer
     private static void ChangeProfile(HttpListenerContext context)
     {
         if (_profiles is null) { TrySend(context, 503, "application/json", Fail("profiles are unavailable")); return; }
-        byte[] body;
-        try { body = ReadCapped(context.Request.InputStream); }
+        Dictionary<string, string> fields;
+        try { fields = ReadForm(context.Request); }
         catch (Exception e) { TrySend(context, 400, "application/json", Fail($"could not read the request — {e.Message}")); return; }
-        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string part in Encoding.UTF8.GetString(body).Split('&'))
-        {
-            int at = part.IndexOf('=');
-            if (at < 0) continue;
-            fields[Uri.UnescapeDataString(part[..at].Replace('+', ' '))] =
-                Uri.UnescapeDataString(part[(at + 1)..].Replace('+', ' '));
-        }
         fields.TryGetValue("action", out string? action);
         fields.TryGetValue("name", out string? name);
         fields.TryGetValue("source", out string? source);
@@ -833,6 +839,81 @@ internal static class EditorServer
         {
             TrySend(context, 400, "application/json", Fail(e.Message));
         }
+    }
+
+    // ---- POST /api/settings ----------------------------------------------------------------------
+
+    /// <summary>
+    /// Persist and live-apply the two carried-weight warning cutoffs.
+    ///
+    /// The callback writes BepInEx/config/com.savi.valeloot.cfg, outside the plugin directory an
+    /// upgrade replaces. Bounds are checked here as well as in the number inputs: this endpoint is
+    /// local, not trusted, and yellow >= red would make the yellow state unreachable.
+    /// </summary>
+    private static void SaveSettings(HttpListenerContext context)
+    {
+        if (_saveBagThresholds is null)
+        {
+            TrySend(context, 503, "application/json", Fail("bag indicator settings are unavailable"));
+            return;
+        }
+
+        Dictionary<string, string> fields;
+        try { fields = ReadForm(context.Request); }
+        catch (Exception e)
+        {
+            TrySend(context, 400, "application/json", Fail($"could not read the request — {e.Message}"));
+            return;
+        }
+
+        if (!fields.TryGetValue("yellowPercent", out string? yellowText)
+            || !int.TryParse(yellowText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int yellow)
+            || yellow is < 1 or > 98)
+        {
+            TrySend(context, 400, "application/json", Fail("yellow threshold must be a whole percentage from 1 to 98"));
+            return;
+        }
+        if (!fields.TryGetValue("redPercent", out string? redText)
+            || !int.TryParse(redText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int red)
+            || red is < 2 or > 99)
+        {
+            TrySend(context, 400, "application/json", Fail("red threshold must be a whole percentage from 2 to 99"));
+            return;
+        }
+        if (yellow >= red)
+        {
+            TrySend(context, 400, "application/json", Fail("red threshold must be greater than yellow threshold"));
+            return;
+        }
+
+        try
+        {
+            _saveBagThresholds(yellow, red);
+        }
+        catch (Exception e)
+        {
+            TrySend(context, 500, "application/json",
+                    Fail($"could not save bag indicator settings — {e.Message}"));
+            return;
+        }
+
+        Send(context, 200, "application/json",
+             Utf8("{\"ok\":true,\"yellowPercent\":" + yellow.ToString(CultureInfo.InvariantCulture)
+                + ",\"redPercent\":" + red.ToString(CultureInfo.InvariantCulture) + "}"));
+    }
+
+    private static Dictionary<string, string> ReadForm(HttpListenerRequest request)
+    {
+        byte[] body = ReadCapped(request.InputStream);
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string part in Encoding.UTF8.GetString(body).Split('&'))
+        {
+            int at = part.IndexOf('=');
+            if (at < 0) continue;
+            fields[Uri.UnescapeDataString(part[..at].Replace('+', ' '))] =
+                Uri.UnescapeDataString(part[(at + 1)..].Replace('+', ' '));
+        }
+        return fields;
     }
 
     /// <summary>Read a request body, refusing at the cap rather than after it.</summary>
