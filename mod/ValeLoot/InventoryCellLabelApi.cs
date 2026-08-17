@@ -7,14 +7,6 @@ namespace ValeLoot;
 
 /// <summary>
 /// Cooperative bottom-right inventory-cell text extension point for soft-dependent plugins.
-///
-/// ValeLoot already owns the inventory repaint hooks, so another plugin must not detour the same
-/// UIInventoryTab RenderPage/Redraw bodies. This API instead watches UIInventoryItem.Draw (a different
-/// native surface) and lets one provider supply a short label for the cell after the game has bound it.
-///
-/// The existing Count/quantity TMP label is reused as the anchor because it is already laid out in the
-/// bottom-right corner by SpiritVale. Its original count text is preserved; the external label is appended
-/// as a second, smaller line. Pooled cells are safe because every Draw reapplies or removes the extension.
 /// </summary>
 public static class ValeLootInventoryCellApi
 {
@@ -42,17 +34,12 @@ public static class ValeLootInventoryCellApi
         InventoryCellLabel.RefreshVisible();
     }
 
-    /// <summary>Re-evaluate recently visible cells, e.g. after an asynchronous market lookup completes.</summary>
     public static bool Refresh() => InventoryCellLabel.RefreshVisible();
-
-    /// <summary>Human-readable install state for diagnostics.</summary>
     public static string Status() => InventoryCellLabel.Status;
 
     internal static string? BuildLabel(IntPtr cell)
     {
-        // Grimoires deliberately do not expose trustworthy UIInventoryItem.Data in the current client.
         if (cell == IntPtr.Zero || InventoryPaint.IsPresentationOnly(cell)) return null;
-
         Func<IntPtr, string?>? provider;
         lock (Gate) provider = _provider;
         if (provider is null) return null;
@@ -82,6 +69,12 @@ internal static class InventoryCellLabel
     private static readonly Dictionary<IntPtr, IntPtr> CountTextByCell = new();
     private static readonly Dictionary<IntPtr, string> BaseCountByCell = new();
     private static readonly List<IntPtr> Sweep = new();
+
+    // A page/tab redraw emits a tight burst of UIInventoryItem.Draw calls. Remember the newest draw time and
+    // refresh only cells belonging to that burst. This prevents a tab opened seconds ago from remaining in
+    // the progressive market-price queue merely because its pooled cells are still alive.
+    private static DateTime _latestDrawUtc;
+    private static readonly TimeSpan CurrentPageBurstWindow = TimeSpan.FromMilliseconds(750);
 
     private static PtrFn? _getTransform;
     private static IntFn? _getChildCount;
@@ -149,42 +142,30 @@ internal static class InventoryCellLabel
                     case 0:
                     {
                         Draw0Fn hook = (self, mi) => Draw0(index, self, mi);
-                        Hooks.Add(hook);
-                        Originals.Add(null);
+                        Hooks.Add(hook); Originals.Add(null);
                         DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw0Fn? original));
-                        Originals[index] = original;
-                        hooked++;
-                        break;
+                        Originals[index] = original; hooked++; break;
                     }
                     case 1:
                     {
                         Draw1Fn hook = (self, a0, mi) => Draw1(index, self, a0, mi);
-                        Hooks.Add(hook);
-                        Originals.Add(null);
+                        Hooks.Add(hook); Originals.Add(null);
                         DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw1Fn? original));
-                        Originals[index] = original;
-                        hooked++;
-                        break;
+                        Originals[index] = original; hooked++; break;
                     }
                     case 2:
                     {
                         Draw2Fn hook = (self, a0, a1, mi) => Draw2(index, self, a0, a1, mi);
-                        Hooks.Add(hook);
-                        Originals.Add(null);
+                        Hooks.Add(hook); Originals.Add(null);
                         DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw2Fn? original));
-                        Originals[index] = original;
-                        hooked++;
-                        break;
+                        Originals[index] = original; hooked++; break;
                     }
                     case 3:
                     {
                         Draw3Fn hook = (self, a0, a1, a2, mi) => Draw3(index, self, a0, a1, a2, mi);
-                        Hooks.Add(hook);
-                        Originals.Add(null);
+                        Hooks.Add(hook); Originals.Add(null);
                         DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw3Fn? original));
-                        Originals[index] = original;
-                        hooked++;
-                        break;
+                        Originals[index] = original; hooked++; break;
                     }
                 }
             }
@@ -193,7 +174,7 @@ internal static class InventoryCellLabel
 
         _installed = hooked > 0;
         Status = _installed
-            ? $"ready: {hooked} UIInventoryItem.Draw body/bodies; bottom-right Count label"
+            ? $"ready: {hooked} UIInventoryItem.Draw body/bodies; bottom-right Count label; latest-page burst targeting"
             : "inventory-cell label unavailable: no pointer-safe UIInventoryItem.Draw overload resolved";
         return _installed;
     }
@@ -207,66 +188,45 @@ internal static class InventoryCellLabel
         {
             switch (type)
             {
-                case "System.Boolean":
-                case "System.Byte":
-                case "System.SByte":
-                case "System.Int16":
-                case "System.UInt16":
-                case "System.Int32":
-                case "System.UInt32":
-                case "System.Int64":
-                case "System.UInt64":
-                case "System.Single":
-                case "System.Double":
+                case "System.Boolean": case "System.Byte": case "System.SByte":
+                case "System.Int16": case "System.UInt16": case "System.Int32": case "System.UInt32":
+                case "System.Int64": case "System.UInt64": case "System.Single": case "System.Double":
                     return false;
             }
         }
         return true;
     }
 
-    private static void Draw0(int index, IntPtr self, IntPtr mi)
-    {
-        (Originals[index] as Draw0Fn)?.Invoke(self, mi);
-        Touch(self);
-    }
-
-    private static void Draw1(int index, IntPtr self, IntPtr a0, IntPtr mi)
-    {
-        (Originals[index] as Draw1Fn)?.Invoke(self, a0, mi);
-        Touch(self);
-    }
-
-    private static void Draw2(int index, IntPtr self, IntPtr a0, IntPtr a1, IntPtr mi)
-    {
-        (Originals[index] as Draw2Fn)?.Invoke(self, a0, a1, mi);
-        Touch(self);
-    }
-
-    private static void Draw3(int index, IntPtr self, IntPtr a0, IntPtr a1, IntPtr a2, IntPtr mi)
-    {
-        (Originals[index] as Draw3Fn)?.Invoke(self, a0, a1, a2, mi);
-        Touch(self);
-    }
+    private static void Draw0(int i, IntPtr self, IntPtr mi) { (Originals[i] as Draw0Fn)?.Invoke(self, mi); Touch(self); }
+    private static void Draw1(int i, IntPtr self, IntPtr a0, IntPtr mi) { (Originals[i] as Draw1Fn)?.Invoke(self, a0, mi); Touch(self); }
+    private static void Draw2(int i, IntPtr self, IntPtr a0, IntPtr a1, IntPtr mi) { (Originals[i] as Draw2Fn)?.Invoke(self, a0, a1, mi); Touch(self); }
+    private static void Draw3(int i, IntPtr self, IntPtr a0, IntPtr a1, IntPtr a2, IntPtr mi) { (Originals[i] as Draw3Fn)?.Invoke(self, a0, a1, a2, mi); Touch(self); }
 
     private static void Touch(IntPtr cell)
     {
         if (cell == IntPtr.Zero) return;
-        RecentlyDrawn[cell] = DateTime.UtcNow;
+        DateTime now = DateTime.UtcNow;
+        RecentlyDrawn[cell] = now;
+        _latestDrawUtc = now;
         Apply(cell);
     }
 
     public static bool RefreshVisible()
     {
-        if (!_installed) return false;
-        DateTime cutoff = DateTime.UtcNow.AddSeconds(-15);
+        if (!_installed || _latestDrawUtc == default) return false;
+        DateTime currentPageCutoff = _latestDrawUtc - CurrentPageBurstWindow;
+        DateTime garbageCutoff = DateTime.UtcNow.AddMinutes(-1);
         Sweep.Clear();
         bool any = false;
+
         foreach ((IntPtr cell, DateTime last) in RecentlyDrawn)
         {
-            if (last < cutoff) { Sweep.Add(cell); continue; }
+            if (last < garbageCutoff) { Sweep.Add(cell); continue; }
+            if (last < currentPageCutoff) continue;
             Apply(cell);
             any = true;
         }
+
         foreach (IntPtr cell in Sweep)
         {
             RecentlyDrawn.Remove(cell);
@@ -336,14 +296,12 @@ internal static class InventoryCellLabel
         {
             IntPtr child = _getChild(transform, i, IntPtr.Zero);
             if (child == IntPtr.Zero) continue;
-
             string name = Il2CppMeta.ReadString(_getName(child, IntPtr.Zero)) ?? "";
             if (IsCountName(name))
             {
                 IntPtr text = _getComponent(child, _tmpType, IntPtr.Zero);
                 if (text != IntPtr.Zero) return text;
             }
-
             IntPtr nested = FindCountText(child, depth + 1, visited + i + 1);
             if (nested != IntPtr.Zero) return nested;
         }
