@@ -489,15 +489,14 @@ h3.sec{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(
 #coach .v{color:#8fc4ef}
 #coach .n{color:var(--warn);font-variant-numeric:tabular-nums}
 .ac{position:absolute;z-index:30;background:#0a0e0c;border:1px solid var(--line2);border-radius:4px;
-  box-shadow:0 14px 32px rgba(0,0,0,.65);max-height:204px;overflow:auto;min-width:0;padding:3px}
-.ac div{padding:4px 8px;border-radius:3px;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12px}
+  box-shadow:0 14px 32px rgba(0,0,0,.65);max-height:260px;overflow:auto;min-width:0;padding:3px}
+.ac div{padding:5px 8px;border-radius:3px;cursor:pointer;display:grid;
+  grid-template-columns:minmax(0,1fr);gap:2px;font-size:12px}
 .ac div.on{background:rgba(200,169,97,.14)}
-.ac b{min-width:0;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;
-  color:var(--ink);font-family:var(--mono);font-size:11.5px;flex:0 0 auto}
-.ac .desc{min-width:0;color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;flex:1 100 0}
-.ac .meta{margin-left:auto;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:var(--gold-dim);font:10.5px var(--mono);flex:0 1 auto}
+.ac b{min-width:0;font-weight:600;color:var(--ink);font-family:var(--mono);font-size:11.5px;
+  overflow-wrap:anywhere}
+.ac .desc{min-width:0;color:var(--faint);font-size:11px;line-height:1.35;overflow-wrap:anywhere}
+.ac .meta{min-width:0;color:var(--gold-dim);font:10.5px var(--mono);overflow-wrap:anywhere}
 .txtfoot{flex:none;display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--line);
   font-size:11.5px;color:var(--faint)}
 
@@ -819,6 +818,504 @@ function formatPrintedValue(printed) {
     return "<s>?</s>";
   return printed < 0 ? String(printed) : `+${printed}`;
 }
+
+// tools/valeloot-editor/stat-vocabulary.ts
+var STAT_VOCABULARY = {
+  Str: {
+    label: "Str",
+    aliases: []
+  },
+  Vit: {
+    label: "Vit",
+    aliases: []
+  },
+  Agi: {
+    label: "Agi",
+    aliases: []
+  },
+  Dex: {
+    label: "Dex",
+    aliases: []
+  },
+  Int: {
+    label: "Int",
+    aliases: []
+  },
+  Luk: {
+    label: "Luk",
+    aliases: []
+  },
+  AllStats: {
+    label: "All Stats",
+    aliases: []
+  },
+  Hp: {
+    label: "Hp",
+    aliases: [
+      "health",
+      "hitpoints",
+      "hit points"
+    ]
+  },
+  Mp: {
+    label: "Mp",
+    aliases: [
+      "mana"
+    ]
+  },
+  Atk: {
+    label: "Atk",
+    aliases: [
+      "attack"
+    ]
+  },
+  Matk: {
+    label: "Matk",
+    aliases: [
+      "magic attack"
+    ]
+  },
+  Def: {
+    label: "Def",
+    aliases: [
+      "defense",
+      "defence"
+    ]
+  },
+  Mdef: {
+    label: "Mdef",
+    aliases: [
+      "magic defense",
+      "magic defence"
+    ]
+  },
+  DefFlat: {
+    label: "Flat Def",
+    aliases: [
+      "flat defense",
+      "flat defence"
+    ]
+  },
+  MdefFlat: {
+    label: "Flat Mdef",
+    aliases: [
+      "flat magic defense",
+      "flat magic defence"
+    ]
+  },
+  Hit: {
+    label: "Hit",
+    aliases: [
+      "accuracy"
+    ]
+  },
+  Flee: {
+    label: "Flee",
+    aliases: [
+      "dodge",
+      "evasion"
+    ]
+  },
+  Crit: {
+    label: "Crit",
+    aliases: [
+      "critical",
+      "crit chance"
+    ]
+  },
+  CritDamage: {
+    label: "Crit Damage",
+    aliases: [
+      "critical damage"
+    ]
+  },
+  CritDef: {
+    label: "Crit Def",
+    aliases: [
+      "critical defense",
+      "critical defence"
+    ]
+  },
+  Block: {
+    label: "Block",
+    aliases: []
+  },
+  AtkSpd: {
+    label: "Attack Speed",
+    aliases: [
+      "attack speed",
+      "aspd"
+    ]
+  },
+  CastSpd: {
+    label: "Cast Speed",
+    aliases: [
+      "casting speed",
+      "cspd"
+    ]
+  },
+  MoveSpd: {
+    label: "Movement Speed",
+    aliases: [
+      "movement speed"
+    ]
+  },
+  AtkSpdLimit: {
+    label: "Attack Speed Limit",
+    aliases: [
+      "attack speed cap",
+      "attack speed limit",
+      "aspd cap",
+      "aspd limit"
+    ]
+  },
+  AtkMult: {
+    label: "Atk",
+    aliases: [
+      "attack"
+    ]
+  },
+  MatkMult: {
+    label: "Matk",
+    aliases: [
+      "magic attack"
+    ]
+  },
+  DefMult: {
+    label: "Def",
+    aliases: [
+      "defense",
+      "defence"
+    ]
+  },
+  MdefMult: {
+    label: "Mdef",
+    aliases: [
+      "magic defense",
+      "magic defence"
+    ]
+  },
+  HpMult: {
+    label: "Hp",
+    aliases: [
+      "health"
+    ]
+  },
+  MpMult: {
+    label: "Mp",
+    aliases: [
+      "mana"
+    ]
+  },
+  FleeMult: {
+    label: "Total Flee",
+    aliases: []
+  },
+  HitMult: {
+    label: "Total Hit",
+    aliases: []
+  },
+  CritMult: {
+    label: "Total Crit Rate",
+    aliases: [
+      "critical",
+      "crit chance"
+    ]
+  },
+  HpRegen: {
+    label: "Hp Regen",
+    aliases: [
+      "health regen",
+      "health regeneration"
+    ]
+  },
+  MpRegen: {
+    label: "Mp Regen",
+    aliases: [
+      "mana regen",
+      "mana regeneration"
+    ]
+  },
+  HpRegenMult: {
+    label: "Hp Regen",
+    aliases: [
+      "health regen"
+    ]
+  },
+  MpRegenMult: {
+    label: "Mp Regen",
+    aliases: [
+      "mana regen"
+    ]
+  },
+  HpRegenMax: {
+    label: "Max Hp Regen",
+    aliases: []
+  },
+  MpRegenMax: {
+    label: "Max Mp Regen",
+    aliases: []
+  },
+  Healing: {
+    label: "Healing",
+    aliases: []
+  },
+  HealingReceived: {
+    label: "Healing Received",
+    aliases: []
+  },
+  HealingToBarrier: {
+    label: "Healing to Barrier",
+    aliases: []
+  },
+  Leech: {
+    label: "Health Leech",
+    aliases: [
+      "lifesteal",
+      "life steal"
+    ]
+  },
+  LeechKill: {
+    label: "Health on Kill",
+    aliases: []
+  },
+  LeechKillMp: {
+    label: "Mana on Kill",
+    aliases: []
+  },
+  SiphonHp: {
+    label: "Siphon Hp",
+    aliases: [
+      "hp siphon"
+    ]
+  },
+  SiphonMp: {
+    label: "Siphon Mp",
+    aliases: [
+      "mp siphon"
+    ]
+  },
+  Range: {
+    label: "Range",
+    aliases: [
+      "attack range"
+    ]
+  },
+  CastRange: {
+    label: "Cast Range",
+    aliases: []
+  },
+  WeightLimit: {
+    label: "Weight Limit",
+    aliases: [
+      "carry weight"
+    ]
+  },
+  DoubleAttack: {
+    label: "Multistrike",
+    aliases: [
+      "double attack"
+    ]
+  },
+  Chain: {
+    label: "Auto-Attack Chain",
+    aliases: []
+  },
+  Splash: {
+    label: "Auto-Attack Splash",
+    aliases: []
+  },
+  MpCost: {
+    label: "Mp Cost",
+    aliases: [
+      "mana cost"
+    ]
+  },
+  ReflectDamage: {
+    label: "Reflect Damage",
+    aliases: [
+      "damage reflect",
+      "thorns"
+    ]
+  },
+  ReflectSpell: {
+    label: "Spell Reflect",
+    aliases: []
+  },
+  ThreatMult: {
+    label: "Threat Generation",
+    aliases: []
+  },
+  ExpRate: {
+    label: "EXP Rate",
+    aliases: []
+  },
+  DropRate: {
+    label: "Drop Rate",
+    aliases: []
+  },
+  DefPierce: {
+    label: "Def Pierce",
+    aliases: [
+      "defense pierce",
+      "armor penetration",
+      "armour penetration"
+    ]
+  },
+  MdefPierce: {
+    label: "Mdef Pierce",
+    aliases: [
+      "magic defense pierce"
+    ]
+  },
+  MatkPerStr: {
+    label: "Matk per Str",
+    aliases: [
+      "magic attack per str"
+    ]
+  },
+  AtkPerStr: {
+    label: "Atk per Str",
+    aliases: [
+      "attack per str"
+    ]
+  },
+  AllResist: {
+    label: "All Resist (except Neutral)",
+    aliases: []
+  },
+  PerfectDodge: {
+    label: "Perfect Dodge",
+    aliases: []
+  },
+  PerfectHit: {
+    label: "Perfect Hit",
+    aliases: []
+  },
+  PerfectCloak: {
+    label: "Perfect Cloak",
+    aliases: []
+  },
+  DamageMelee: {
+    label: "Melee Damage",
+    aliases: []
+  },
+  DamageMagic: {
+    label: "Magic Damage",
+    aliases: []
+  },
+  DamageRanged: {
+    label: "Ranged Damage",
+    aliases: []
+  },
+  DamageStatus: {
+    label: "Status Damage",
+    aliases: []
+  },
+  DamageCloseRange: {
+    label: "Close-Range Damage",
+    aliases: []
+  },
+  DamageFarRange: {
+    label: "Far-Range Damage",
+    aliases: []
+  },
+  DamageFromMagic: {
+    label: "Damage from Magic",
+    aliases: []
+  },
+  DamageFromMelee: {
+    label: "Damage from Melee",
+    aliases: []
+  },
+  DamageFromRanged: {
+    label: "Damage from Ranged",
+    aliases: []
+  },
+  FinalDamageReduction: {
+    label: "Final Damage Reduction",
+    aliases: [
+      "damage reduction"
+    ]
+  },
+  BuffDuration: {
+    label: "Buff Duration",
+    aliases: []
+  },
+  StatusDuration: {
+    label: "Status Duration",
+    aliases: []
+  },
+  CooldownRecovery: {
+    label: "Cooldown Recovery",
+    aliases: []
+  },
+  StatusMaxStacks: {
+    label: "Max Stacks",
+    aliases: []
+  },
+  AutoattackMatk: {
+    label: "Auto-attack uses Matk",
+    aliases: [
+      "auto attack magic",
+      "magic auto attack"
+    ]
+  },
+  AfterCastDelay: {
+    label: "After Cast Delay",
+    aliases: []
+  },
+  NoCastCancel: {
+    label: "Uninterruptible Cast",
+    aliases: []
+  },
+  NoKnockback: {
+    label: "Knockback Immunity",
+    aliases: []
+  },
+  NoFlinch: {
+    label: "Flinch Immunity",
+    aliases: []
+  },
+  NoReflect: {
+    label: "Reflected Damage Immunity",
+    aliases: []
+  },
+  NoAttack: {
+    label: "Cannot Attack",
+    aliases: []
+  },
+  SummonAllStats: {
+    label: "Summon All Stats",
+    aliases: []
+  },
+  SummonHpMult: {
+    label: "Summon Hp",
+    aliases: []
+  },
+  SummonAtkSpd: {
+    label: "Summon Attack Speed",
+    aliases: [
+      "summon attack speed"
+    ]
+  },
+  SummonAtkMult: {
+    label: "Summon Atk",
+    aliases: []
+  },
+  SummonMatkMult: {
+    label: "Summon Matk",
+    aliases: []
+  },
+  SummonHealing: {
+    label: "Summon Healing",
+    aliases: []
+  },
+  SummonResist: {
+    label: "Summon Resist",
+    aliases: []
+  }
+};
 
 // src/filter/loot-filter.ts
 var STAT_ALIASES = [
@@ -1711,6 +2208,7 @@ globalThis.VL = {
   LOOT_HIGHLIGHTS,
   BUILTIN_LOOT_SOUNDS,
   STAT_ALIASES,
+  STAT_VOCABULARY,
   completionContextAt,
   editIndent,
   formatPrintedValue
@@ -1844,6 +2342,20 @@ let profiles = [];
 let focusRule = null;          // where the keyboard should land after a reorder
 let fileState = { filter: null, items: null, bag: null };
 let bagSettings = { enabled: true, yellowPercent: 60, redPercent: 80 };
+function statRecord(code) {
+  const found = VL.STAT_VOCABULARY && VL.STAT_VOCABULARY[code];
+  return {
+    label: found && found.label
+      ? found.label
+      : String(code).replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
+    aliases: found && Array.isArray(found.aliases) ? found.aliases : [],
+  };
+}
+
+function statNameHtml(code) {
+  return '<span class="stat-name" title="Internal: ' + esc(code) + '">'
+    + esc(statRecord(code).label) + '</span>';
+}
 
 const src = $('src');
 /** What is typed in the bag's find box. Presentation only — never saved, never part of a rule. */
@@ -2419,7 +2931,7 @@ function statLine(item) {
   return item.lines.map((l) => {
     const roll = l.rollPct === null ? '' : (l.rollPct > 100 ? '<u>' + l.rollPct + '%</u>' : l.rollPct + '%');
     const printed = VL.formatPrintedValue(l.printed);
-    return esc(l.stat) + ' ' + printed + (roll ? ' ' + roll : '');
+    return statNameHtml(l.stat) + ' ' + printed + (roll ? ' ' + roll : '');
   }).join('  ');
 }
 
@@ -2911,10 +3423,16 @@ function usedValues(keyword) {
 }
 
 function statCandidates(query) {
-  const aliases = Array.isArray(VL.STAT_ALIASES) ? VL.STAT_ALIASES : [];
-  const available = new Set(vocab.stats.map((stat) => stat.toLowerCase()));
-  const paired = new Set();
-  const out = [];
+  const legacyAliases = Array.isArray(VL.STAT_ALIASES) ? VL.STAT_ALIASES : [];
+  const canonicalBySpelling = new Map();
+  const legacyTermsByCanonical = new Map();
+  for (const alias of legacyAliases) {
+    const canonical = alias.internal.toLowerCase();
+    canonicalBySpelling.set(alias.friendly.toLowerCase(), alias.internal);
+    canonicalBySpelling.set(canonical, alias.internal);
+    legacyTermsByCanonical.set(canonical, [alias.friendly, alias.internal]);
+  }
+  const seen = new Set();
   const q = query.toLowerCase();
   const rank = (value) => {
     const lower = value.toLowerCase();
@@ -2924,25 +3442,25 @@ function statCandidates(query) {
     return q.length > 1 && lower.includes(q) ? 2 : -1;
   };
 
-  // One concept per alias pair. The spelling a player writes is primary; the game's canonical enum
-  // name remains visible and searchable without becoming a duplicate row.
-  for (const alias of aliases) {
-    const friendly = alias.friendly.toLowerCase();
-    const internal = alias.internal.toLowerCase();
-    if (!available.has(internal) && !available.has(friendly)) continue;
-    paired.add(friendly);
-    paired.add(internal);
-    const score = Math.min(...[rank(alias.friendly), rank(alias.internal)].filter((value) => value >= 0));
-    if (!Number.isFinite(score)) continue;
-    out.push({ text: alias.friendly, meta: alias.internal, rank: score });
-  }
-
-  for (const stat of vocab.stats) {
-    if (paired.has(stat.toLowerCase())) continue;
-    const score = rank(stat);
-    if (score >= 0) out.push({ text: stat, rank: score });
-  }
-  return out.sort((a, b) => a.rank - b.rank || a.text.localeCompare(b.text))
+  return vocab.stats.flatMap((availableStat) => {
+    const stat = canonicalBySpelling.get(availableStat.toLowerCase()) || availableStat;
+    const key = stat.toLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const record = statRecord(stat);
+    let score = -1;
+    const consider = (spelling) => {
+      const candidate = rank(spelling);
+      if (candidate >= 0) score = score < 0 ? candidate : Math.min(score, candidate);
+    };
+    consider(availableStat);
+    consider(stat);
+    consider(record.label);
+    for (const alias of record.aliases) consider(alias);
+    for (const alias of legacyTermsByCanonical.get(key) || []) consider(alias);
+    if (score < 0) return [];
+    return [{ text: record.label, insert: stat, help: 'writes ' + stat, rank: score }];
+  }).sort((a, b) => a.rank - b.rank || a.text.localeCompare(b.text))
     .slice(0, 60).map(({ rank: _rank, ...item }) => item);
 }
 
@@ -3014,7 +3532,8 @@ function accept(index) {
   if (!item || !acRange) return;
   const before = src.value.slice(0, acRange.from);
   const after = src.value.slice(src.selectionStart);
-  const quoted = acRange.kind === 'item' && /\s/.test(item.text) ? '"' + item.text + '"' : item.text;
+  const chosen = item.insert || item.text;
+  const quoted = acRange.kind === 'item' && /\s/.test(chosen) ? '"' + chosen + '"' : chosen;
   const spaced = ['cond', 'keyword', 'statOperator', 'operator', 'minimumOperator'].includes(acRange.kind);
   const insert = quoted + (spaced ? ' ' : '');
   src.value = before + insert + after;
@@ -4025,7 +4544,7 @@ function renderAct() {
     + '<button class="mk" data-expect="result">save current result</button></div>'
     + '<p class="meta" style="margin:7px 0 0">Checks warn after edits and reordering. They never force a result or block Save.</p></div>'
     + '<div class="inspect-sec"><h4>item facts</h4><div class="inspect-stats">'
-    + (item.lines.length ? item.lines.map((line) => esc(line.stat) + ' '
+    + (item.lines.length ? item.lines.map((line) => statNameHtml(line.stat) + ' '
       + (line.printed === null ? '?' : '+' + line.printed)
       + (line.rollPct === null ? '' : line.rollPct > 100 ? ' <u>' + line.rollPct + '% over</u>' : ' ' + line.rollPct + '%')).join('<br>')
       : '<em>no substat lines</em>') + '</div></div>'
@@ -4033,7 +4552,7 @@ function renderAct() {
     + '<button class="mk" data-mk="name">Name <b>"' + esc(item.name) + '"</b></button>'
     + '<button class="mk" data-mk="type">Type <b>' + esc(item.slotType) + '</b></button>'
     + (item.topRolls ? '<button class="mk" data-mk="top">TopRolls <b>&gt;= ' + item.topRolls + '</b></button>' : '')
-    + (item.lines.length ? '<button class="mk" data-mk="stat">Stat <b>' + esc(item.lines[0].stat) + ' &gt;= '
+    + (item.lines.length ? '<button class="mk" data-mk="stat">Stat <b>' + statNameHtml(item.lines[0].stat) + ' &gt;= '
       + (item.lines[0].rollPct === null ? 90 : Math.min(100, item.lines[0].rollPct)) + '%</b></button>' : '')
     + '</div></div><div class="inspect-sec"><h4>just this item</h4><div class="row">'
     + '<button class="mk" data-mk="pin">always show it</button>'
@@ -4082,7 +4601,7 @@ function showNote(event, item) {
     + ' · ' + item.highRolls + ' high roll' + (item.highRolls === 1 ? '' : 's')
     + ' <span class="rollhi">(at ' + (plan ? plan.threshold : 90) + '%)</span></div>';
   html += '<div class="st">' + (item.lines.length
-    ? item.lines.map((l) => esc(l.stat) + ' ' + VL.formatPrintedValue(l.printed)
+    ? item.lines.map((l) => statNameHtml(l.stat) + ' ' + VL.formatPrintedValue(l.printed)
       + (l.rollPct === null ? '' : (l.rollPct > 100 ? ' <u>' + l.rollPct + '% over</u>' : ' ' + l.rollPct + '%'))).join('<br>')
     : '<em>no substat lines</em>') + '</div>';
   box.innerHTML = html;
