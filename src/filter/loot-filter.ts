@@ -73,16 +73,18 @@ export function canonicalStatName(input: string): string {
 
 export interface StatCondition {
   stat: string;
-  /** The line must roll at least this well (0..100). Omit to accept any roll. */
+  /** Inclusive roll-quality bounds (0..100). Omit both to accept any roll. */
   minRollPct?: number;
+  maxRollPct?: number;
   /**
-   * The line's VALUE as the game prints it must be at least this — the `3` in "+3 AGI".
+   * Inclusive bounds on the line's VALUE as the game prints it — the `3` in "+3 AGI".
    *
-   * Distinct from `minRollPct`, which is where the roll sits in the stat's legal range. A player
-   * asking for "kunais with +3 AGI" means this one; "top-roll AGI" means the other. Conflating them
-   * silently answers a different question than the one asked.
+   * Distinct from roll quality, which is where the roll sits in the stat's legal range. A player
+   * asking for "kunais with +3 AGI" means this value; "top-roll AGI" means roll quality. Conflating
+   * them silently answers a different question than the one asked.
    */
   minValue?: number;
+  maxValue?: number;
 }
 
 export interface LootCondition {
@@ -324,7 +326,10 @@ function matchesStat(item: OwnedGear, condition: StatCondition): boolean {
   return Boolean(line)
     && (condition.minRollPct === undefined
       || (line!.rollPct !== null && line!.rollPct >= condition.minRollPct))
-    && (condition.minValue === undefined || line!.base >= condition.minValue);
+    && (condition.maxRollPct === undefined
+      || (line!.rollPct !== null && line!.rollPct <= condition.maxRollPct))
+    && (condition.minValue === undefined || line!.base >= condition.minValue)
+    && (condition.maxValue === undefined || line!.base <= condition.maxValue);
 }
 
 export function matchesCondition(item: OwnedGear, when: LootCondition, context: LootContext): boolean {
@@ -545,12 +550,30 @@ export function explainCondition(
       over ? 'present' : 'absent', over === when.overRoll);
   }
 
+  const statBounds = (condition: StatCondition): string => {
+    const parts: string[] = [];
+    if (condition.minRollPct !== undefined
+      && condition.maxRollPct !== undefined
+      && condition.minRollPct === condition.maxRollPct) {
+      parts.push(`roll exactly ${condition.minRollPct}%`);
+    } else {
+      if (condition.minRollPct !== undefined) parts.push(`roll at least ${condition.minRollPct}%`);
+      if (condition.maxRollPct !== undefined) parts.push(`roll at most ${condition.maxRollPct}%`);
+    }
+    if (condition.minValue !== undefined
+      && condition.maxValue !== undefined
+      && condition.minValue === condition.maxValue) {
+      parts.push(`value exactly ${condition.minValue}`);
+    } else {
+      if (condition.minValue !== undefined) parts.push(`value at least ${condition.minValue}`);
+      if (condition.maxValue !== undefined) parts.push(`value at most ${condition.maxValue}`);
+    }
+    return parts.join(', ') || 'present';
+  };
+
   for (const condition of when.requiredStats ?? []) {
     const pass = matchesStat(item, condition);
-    const bounds = [
-      condition.minRollPct === undefined ? '' : `${condition.minRollPct}% roll`,
-      condition.minValue === undefined ? '' : `value ${condition.minValue}`,
-    ].filter(Boolean).join(', ') || 'present';
+    const bounds = statBounds(condition);
     const line = item.lines.find((candidate) =>
       candidate.stat.toLowerCase() === canonicalStatName(condition.stat).toLowerCase());
     const actual = !line ? 'missing'
@@ -564,10 +587,7 @@ export function explainCondition(
     for (const condition of when.stats) {
       const pass = matchesStat(item, condition);
       if (pass) statHits++;
-      const bounds = [
-        condition.minRollPct === undefined ? '' : `${condition.minRollPct}% roll`,
-        condition.minValue === undefined ? '' : `value ${condition.minValue}`,
-      ].filter(Boolean).join(', ') || 'present';
+      const bounds = statBounds(condition);
       const line = item.lines.find((candidate) =>
         candidate.stat.toLowerCase() === canonicalStatName(condition.stat).toLowerCase());
       const actual = !line ? 'missing'

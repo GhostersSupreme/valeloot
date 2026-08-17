@@ -66,9 +66,9 @@ the whole truth about it, in one place, because it is the thing you would most w
 * It listens on 127.0.0.1:38512 and nothing else. Not 0.0.0.0, not your LAN address, not your Wi-Fi.
   127.0.0.1 is your own machine talking to itself; a request from anywhere else cannot arrive, and one
   that tries is refused before it is read.
-* It serves seven fixed routes: ValeLoot's embedded editor page, a state snapshot of YOUR rules, YOUR
-  bag and the game's item list, filter saving, local profile management, session alert history, sound
-  previews for your own .wav files, and a health check so the page can verify that the mod is serving it.
+* It serves eight fixed routes: ValeLoot's embedded editor page; a state snapshot of YOUR rules, YOUR
+  bag and the game's item list; filter saving; local profile management; session alert history;
+  bag-warning settings; sound previews for your own .wav files; and a health check.
 * It carries no game traffic. It is not attached to the game's connection in any way, sees no game
   packet, and contains no packet capture. That distinction is the point: it is a local web page for a
   text file, not a window onto the game's network.
@@ -120,7 +120,7 @@ INSTALL
 Unzip, launch, press F8. There are two downloads and the first one is almost certainly the one you
 want.
 
-ValeLoot-0.5.0-with-BepInEx.zip - TAKE THIS ONE
+ValeLoot-0.6.1-with-BepInEx.zip - TAKE THIS ONE
 
   1. Unzip it into your SpiritVale folder - the folder holding SpiritVale.exe.
   2. Start the game. THE FIRST START TAKES A FEW MINUTES - see below.
@@ -146,7 +146,7 @@ BepInEx is included UNMODIFIED, under its own LGPL-2.1 licence. Its licence text
 source are in NOTICE.txt at the root of the zip, alongside BepInEx-LICENSE.txt. ValeLoot's own licence
 is at the bottom of this file and covers only ValeLoot.
 
-ValeLoot-0.5.0.zip - THE PLUGIN ON ITS OWN
+ValeLoot-0.6.1.zip - THE PLUGIN ON ITS OWN
 
 For someone who already runs BepInEx 6 IL2CPP (the BLEEDING-EDGE "be" build). It contains the DLL and
 this README and nothing else. Unzip it into the same game folder - the paths inside are already
@@ -291,6 +291,10 @@ The alerts button shows every pickup decision from this game session: item and q
 rule/tag, silent outcomes, and which item supplied the one sound when several items arrived together.
 Clear it whenever you like. The list is bounded in memory and is never written to disk.
 
+The HUD WEIGHT control above the bag sets the yellow and red carried-weight warning thresholds. They
+apply immediately and are saved in BepInEx/config/com.savi.valeloot.cfg, outside the plugin folder, so
+replacing the plugin during an upgrade keeps them.
+
 The same editor, without the game running
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -360,6 +364,8 @@ Conditions (all optional, and all must hold for the block to match):
                             whole non-equipment kinds named by ValeLoot
     Stat Agi >= 90%         that substat line rolled in the top 10% of its range
     Stat Agi >= 3           that substat PRINTS at least +3 on this item
+    Stat DamageFromMagic <= -3
+                            that substat PRINTS -3 or lower, for detrimental-stat severity
     RequireStat Agi >= 3    mandatory; never counted by StatMatches or changed by AnyStat
     StatMatches >= 3        at least three of the listed Stat conditions must match
     AnyStat                 one Stat line is enough (default: every Stat line must match)
@@ -372,6 +378,9 @@ Conditions (all optional, and all must hold for the block to match):
     OverRoll / NoOverRoll   has a line that rolled past 100% - the narrow over-roll form of Chaos
     Chaos / NoChaos         has an extra substat OR a roll past 100%, or has neither
     Favorite / NotFavorite  the game's own favourite flag
+
+Stat, RequireStat and Stat lines inside AnyOf accept >=, >, =, < and <= for both printed values
+and % roll quality. Values are integral: < -2 is equivalent to <= -3.
 
 Stat also accepts these player-facing names; the internal names remain valid:
 
@@ -584,8 +593,10 @@ BepInEx/config/com.savi.valeloot.cfg, written on first run with every option doc
   [Bag Indicator] Enabled          true     Tint the HUD inventory button yellow or red as carried
                                             weight rises.
   [Bag Indicator] YellowPercent      60     Percentage above which the button turns yellow (1-98).
+                                            Settable from the editor's HUD WEIGHT control.
   [Bag Indicator] RedPercent         80     Percentage above which the button turns red; must exceed
-                                            YellowPercent (2-99).
+                                            YellowPercent (2-99). Settable from the editor's HUD
+                                            WEIGHT control.
   [Bag Indicator] TintStrength      0.85    Yellow/red warning-tint strength (0.10-1.00).
   [Editor]    Enabled     true     The editor server. false opens no port at all - see THE ONE PORT
                                    IT OPENS above.

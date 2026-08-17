@@ -143,6 +143,9 @@ internal static class ItemCatalog
     /// <summary>Everything the catalog holds — the reference file's source, and nothing else's.</summary>
     public static IReadOnlyCollection<Entry> All => _entries.Values;
 
+    /// <summary>Retry the lazy config read from a caller already known to be on the main thread.</summary>
+    internal static bool EnsureReady() => EnsureCatalog();
+
     private static Action<string> _log = _ => { };
     private static string _configDirectory = "";
 

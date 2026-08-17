@@ -200,3 +200,81 @@ describe('AnyOf', () => {
     expect(parsed.errors.some((error) => error.message.includes(message))).toBe(true);
   });
 });
+
+describe('Stat comparison bounds', () => {
+  const gear = (base: number | null, rollPct = 50): OwnedGear => ({
+    ...item,
+    lines: base === null ? [] : [{
+      stat: 'DamageFromMagic',
+      base,
+      rollPct,
+      isChaos: false,
+      over: false,
+    }],
+  });
+
+  const parse = (body: string): LootCondition => {
+    const parsed = parseLootFilter(`Show "negative"\n${body}`);
+    expect(parsed.errors).toEqual([]);
+    return parsed.rules[0]!.when;
+  };
+
+  test.each([
+    ['<= -3', -3, true],
+    ['<= -3', -5, true],
+    ['<= -3', -2, false],
+    ['< -3', -4, true],
+    ['< -3', -3, false],
+    ['= -3', -3, true],
+    ['= -3', -4, false],
+  ] as const)('Stat DamageFromMagic %s against %d', (comparison, base, expected) => {
+    const when = parse(`    Stat DamageFromMagic ${comparison}`);
+    expect(matchesCondition(gear(base), when, {})).toBe(expected);
+  });
+
+  test('does not satisfy an upper bound when the stat is missing', () => {
+    const when = parse('    Stat DamageFromMagic <= -3');
+    expect(matchesCondition(gear(null), when, {})).toBe(false);
+  });
+
+  test('applies inclusive and strict roll-percentage ceilings', () => {
+    const inclusive = parse('    Stat DamageFromMagic <= 50%');
+    const strict = parse('    Stat DamageFromMagic < 50%');
+    expect(matchesCondition(gear(-3, 50), inclusive, {})).toBe(true);
+    expect(matchesCondition(gear(-3, 51), inclusive, {})).toBe(false);
+    expect(matchesCondition(gear(-3, 49), strict, {})).toBe(true);
+    expect(matchesCondition(gear(-3, 50), strict, {})).toBe(false);
+  });
+
+  test('uses the same upper-bound predicate for RequireStat and AnyOf', () => {
+    const required = parse('    RequireStat DamageFromMagic <= -3');
+    expect(matchesCondition(gear(-3), required, {})).toBe(true);
+    expect(matchesCondition(gear(-2), required, {})).toBe(false);
+
+    const anyOf = parse([
+      '    AnyOf',
+      '        Stat DamageFromMagic <= -3',
+      '        Stat DamageFromMelee <= -3',
+    ].join('\n'));
+    expect(matchesCondition(gear(-5), anyOf, {})).toBe(true);
+    expect(matchesCondition(gear(-2), anyOf, {})).toBe(false);
+  });
+
+  test('round-trips upper and exact stat bounds without turning them into minimums', () => {
+    const parsed = parseLootFilter([
+      'Show "bounds"',
+      '    RequireStat DamageFromMagic <= -3',
+      '    Stat DamageFromMelee < -2',
+      '    AnyOf',
+      '        Stat DamageFromRanged = -5',
+      '        Stat DamageFromPoison <= 50%',
+    ].join('\n'));
+    expect(parsed.errors).toEqual([]);
+
+    const formatted = formatLootFilter(parsed);
+    expect(formatted).toContain('RequireStat DamageFromMagic <= -3');
+    expect(formatted).toContain('Stat      DamageFromMelee <= -3');
+    expect(formatted).toContain('Stat  DamageFromRanged = -5');
+    expect(formatLootFilter(parseLootFilter(formatted))).toBe(formatted);
+  });
+});

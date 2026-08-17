@@ -91,13 +91,13 @@ internal static class BagSnapshot
         public readonly bool HasChaos;
         public readonly string[] StatNames;
         public readonly int[] StatRolls;
-        /// <summary>The value the game prints for each line, or -1 where the catalog could not say.</summary>
-        public readonly int[] StatPrinted;
+        /// <summary>The value the game prints for each line, or null where the catalog could not say.</summary>
+        public readonly int?[] StatPrinted;
         /// <summary>Displayed-max line count, or -1 when any line was unanswerable.</summary>
         public readonly int TopRolls;
 
         public Row(long hash, string uid, string itemId, string displayName, string type, int refine,
-                   bool favorite, bool hasChaos, string[] statNames, int[] statRolls, int[] statPrinted,
+                   bool favorite, bool hasChaos, string[] statNames, int[] statRolls, int?[] statPrinted,
                    int topRolls)
         {
             Hash = hash;
@@ -409,7 +409,7 @@ internal static class BagSnapshot
         int count = facts.StatCount;
         var names = new string[count];
         var rolls = new int[count];
-        var printed = new int[count];
+        var printed = new int?[count];
         int topRolls = 0;
         bool topRollsKnown = count > 0;
         for (int i = 0; i < count; i++)
@@ -418,7 +418,7 @@ internal static class BagSnapshot
             rolls[i] = facts.StatRolls[i];
             printed[i] = ItemCatalog.TryScaledValue(facts.Id, facts.StatTypes[i], facts.StatRolls[i], out int value)
                 ? value
-                : -1;
+                : null;
             if (!ItemCatalog.TryIsDisplayedTop(facts.Id, facts.StatTypes[i], facts.StatRolls[i], out bool top))
                 topRollsKnown = false;
             else if (top)
@@ -534,9 +534,9 @@ internal static class BagSnapshot
                 if (i > 0) text.Append(',');
                 text.Append(row.StatNames[i]).Append(':')
                     .Append(row.StatRolls[i].ToString(CultureInfo.InvariantCulture)).Append(':')
-                    .Append(row.StatPrinted[i] < 0
-                        ? "-"
-                        : row.StatPrinted[i].ToString(CultureInfo.InvariantCulture));
+                    .Append(row.StatPrinted[i] is int displayed
+                        ? displayed.ToString(CultureInfo.InvariantCulture)
+                        : "-");
             }
             text.Append('\n');
         }

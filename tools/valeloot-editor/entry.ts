@@ -11,6 +11,9 @@
  * is also a valid classic script — which is what lets the whole bundle be inlined into one
  * `<script>` on a `file://` page with no import machinery. The page reaches it through the global.
  */
+import { completionContextAt, editIndent } from './autocomplete.ts';
+import { formatPrintedValue } from './display.ts';
+import { STAT_VOCABULARY } from './stat-vocabulary.ts';
 import { formatLootFilter, parseLootFilter } from '../../src/filter/loot-dsl.ts';
 import {
   BUILTIN_LOOT_SOUNDS, LOOT_HIGHLIGHTS, STAT_ALIASES, explainCondition, matchLoot,
@@ -27,4 +30,8 @@ import {
   LOOT_HIGHLIGHTS,
   BUILTIN_LOOT_SOUNDS,
   STAT_ALIASES,
+  STAT_VOCABULARY,
+  completionContextAt,
+  editIndent,
+  formatPrintedValue,
 };

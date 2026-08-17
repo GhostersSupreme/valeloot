@@ -61,9 +61,9 @@ the whole truth about it, in one place, because it is the thing you would most w
 - **It listens on `127.0.0.1:38512` and nothing else.** Not `0.0.0.0`, not your LAN address, not your
   Wi-Fi. `127.0.0.1` is your own machine talking to itself; a request from anywhere else cannot
   arrive, and one that tries is refused before it is read.
-- **It serves five routes:** ValeLoot's embedded editor page, a state snapshot of *your* rules, *your*
-  bag and the game's item list, a save endpoint that writes *your* rule file, a sound preview for your
-  own `.wav` files, and a health check so the page can verify that the mod is serving it.
+- **It serves eight routes:** ValeLoot's embedded editor page; a state snapshot of *your* rules,
+  *your* bag and the game's item list; filter saving; local profile management; session alert history;
+  bag-warning settings; sound previews for your own `.wav` files; and a health check.
 - **It carries no game traffic.** It is not attached to the game's connection in any way, sees no game
   packet, and contains no packet capture. That distinction is the point: it is a local web page for a
   text file, not a window onto the game's network.
@@ -113,7 +113,7 @@ starts with ValeLoot installed.
 Unzip, launch, press F8. There are two downloads and the first one is almost certainly the one you
 want:
 
-### `ValeLoot-0.5.0-with-BepInEx.zip` — take this one
+### `ValeLoot-0.6.1-with-BepInEx.zip` — take this one
 
 1. Unzip it into your SpiritVale folder — the folder holding `SpiritVale.exe`.
 2. Start the game. **The first start takes a few minutes** — see below.
@@ -140,7 +140,7 @@ BepInEx is included **unmodified**, under its own LGPL-2.1 licence. Its licence 
 source are in `NOTICE.txt` at the root of the zip, alongside `BepInEx-LICENSE.txt`. ValeLoot's own
 licence is at the bottom of this file and covers only ValeLoot.
 
-### `ValeLoot-0.5.0.zip` — the plugin on its own
+### `ValeLoot-0.6.1.zip` — the plugin on its own
 
 For someone who already runs BepInEx 6 IL2CPP (the *bleeding-edge* `be` build). It contains the DLL
 and this README and nothing else. Unzip it into the same game folder — the paths inside are already
@@ -245,6 +245,10 @@ seen: the game hands the mod one page of cells at a time, so the count starts as
 at and fills in as you scroll and switch tabs. A count that quietly described twelve items of a
 two-hundred-item bag would be worse than no count.
 
+The **HUD weight** control above the bag sets the yellow and red carried-weight warning thresholds.
+They apply immediately and are saved in `BepInEx/config/com.savi.valeloot.cfg`, outside the plugin
+folder, so replacing the plugin during an upgrade keeps them.
+
 ### The same editor, without the game running
 
 The mod also writes the page to `BepInEx/config/ValeLoot-editor.html` on first run (and refreshes it
@@ -315,6 +319,7 @@ All optional, and all must hold for the block to match.
 | `Type Artifact, Card, Gem, Consumable, Junk` | whole non-equipment kinds named by ValeLoot |
 | `Stat Agi >= 90%` | that substat line rolled in the top 10% of its range |
 | `Stat Agi >= 3` | that substat **prints** at least +3 on this item |
+| `Stat DamageFromMagic <= -3` | that substat prints -3 or lower, for detrimental-stat severity |
 | `AnyStat` | one `Stat` line is enough (default: every `Stat` line must match) |
 | `TopRolls >= 3` | at least three lines print their legal maximum; over-rolls count |
 | `HighRolls >= 3` | at least three hidden raw rolls reach `Threshold` |
@@ -324,6 +329,9 @@ All optional, and all must hold for the block to match.
 | `OverRoll` / `NoOverRoll` | has a line that rolled past 100% — the chaos over-roll |
 | `Chaos` / `NoChaos` | has a chaos type, or has not |
 | `Favorite` / `NotFavorite` | the game's own favourite flag |
+
+`Stat`, `RequireStat`, and `Stat` lines inside `AnyOf` accept `>=`, `>`, `=`, `<`, and `<=` for both
+printed values and `%` roll quality. Values are integral: `< -2` is equivalent to `<= -3`.
 
 `Stat` also accepts player-facing names. Internal names remain valid and canonical:
 
@@ -509,8 +517,8 @@ Sound is Windows-only (it goes through `winmm`). Everything else works regardles
 | `Highlight` | `HoverNote` | `true` | The tooltip line naming the rule that claimed the item. |
 | `Sound` | `Enabled` | `true` | Sounds on picking up a match. |
 | `Bag Indicator` | `Enabled` | `true` | Tint the HUD inventory button yellow or red as carried weight rises. |
-| `Bag Indicator` | `YellowPercent` | `60` | Percentage above which the button turns yellow (1–98). |
-| `Bag Indicator` | `RedPercent` | `80` | Percentage above which the button turns red; must exceed `YellowPercent` (2–99). |
+| `Bag Indicator` | `YellowPercent` | `60` | Percentage above which the button turns yellow (1–98). Settable from the editor's **HUD weight** control. |
+| `Bag Indicator` | `RedPercent` | `80` | Percentage above which the button turns red; must exceed `YellowPercent` (2–99). Settable from the editor's **HUD weight** control. |
 | `Bag Indicator` | `TintStrength` | `0.85` | Yellow/red warning-tint strength (0.10–1.00). |
 | `Editor` | `Enabled` | `true` | The editor server. `false` opens no port at all — see [The one port it opens](#the-one-port-it-opens). |
 | `Editor` | `Port` | `38512` | The loopback port. Change it if something else has that one. |

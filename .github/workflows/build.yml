@@ -79,8 +79,8 @@ jobs:
             --moduleResolution bundler --allowImportingTsExtensions \
             src/filter/loot-dsl.ts src/filter/loot-filter.ts
 
-      - name: Test filter behavior
-        run: bun test tools/conformance/backgrounds.test.ts tools/conformance/statmatches.test.ts tools/conformance/roll-semantics.test.ts tools/conformance/stat-aliases.test.ts
+      - name: Test editor and filter behavior
+        run: bun test tools/valeloot-editor/autocomplete.test.ts tools/valeloot-editor/display.test.ts tools/conformance/backgrounds.test.ts tools/conformance/statmatches.test.ts tools/conformance/roll-semantics.test.ts tools/conformance/stat-aliases.test.ts
 
       # The language has two implementations — the mod's C# parser, which decides what your bag
       # actually looks like, and the editor's TypeScript one, which tells you what it will look

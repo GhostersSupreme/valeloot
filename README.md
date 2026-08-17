@@ -6,7 +6,7 @@ when a matching item is picked up.
 
 It is complete on its own. No companion app, no server, no account, nothing to sign up for.
 
-> ### ⬇ [Download ValeLoot 0.5.0](https://github.com/bjb2/valeloot/releases/download/v0.5.0/ValeLoot-0.5.0-with-BepInEx.zip)
+> ### ⬇ [Download ValeLoot 0.6.1](https://github.com/bjb2/valeloot/releases/download/v0.6.1/ValeLoot-0.6.1-with-BepInEx.zip)
 >
 > Unzip it into your SpiritVale folder, launch the game, press **F8**.
 >
@@ -157,6 +157,7 @@ Hide "vendor trash"
 | `AvgRoll < 35` | legacy alias for `AvgRollPct`; existing filters remain valid |
 | `Stat Agi >= 90%` | that stat's line rolled in the top tenth of its range |
 | `Stat Agi >= 3` | that stat *prints* at least 3 on this item |
+| `Stat DamageFromMagic <= -3` | that stat prints -3 or lower, so detrimental rolls can be matched by severity |
 | `RequireStat Agi >= 3` | a mandatory stat that is not counted by `StatMatches` |
 | `StatMatches >= 3` | at least this many of the listed `Stat` conditions must match |
 | `AnyOf` with indented `Stat` lines | at least one stat inside that group must match |
@@ -182,6 +183,9 @@ Presentation lines belong on `Show` blocks:
 `Stat Agi >= 3` asks what it *prints*. They are different questions with different answers: a 0% roll
 already prints two thirds of the maximum, so on an attribute that caps at 3, `>= 3` means maxed while
 `>= 90%` means genuinely lucky.
+
+`Stat`, `RequireStat`, and `Stat` lines inside `AnyOf` accept `>=`, `>`, `=`, `<`, and `<=` for both
+printed values and `%` roll quality. Values are integral: `< -2` is the same boundary as `<= -3`.
 
 ### Roll and artifact examples
 
@@ -324,6 +328,8 @@ already knows your bag, your rules and the game's item catalog.
 - **Session pickup alerts** list every pickup decision, including stack quantity, matched rule/tag,
   silent outcomes, and which item won a simultaneous batch's single sound. Clear it from the panel;
   it is bounded in memory and never persisted.
+- The **HUD weight** control sets the yellow and red carried-weight warnings immediately. It writes
+  `BepInEx/config/com.savi.valeloot.cfg`, so replacing the plugin during an upgrade keeps both values.
 
 Saving writes the active profile through `valeloot-filter.txt`; your bag recolours on the next inventory redraw.
 
@@ -332,8 +338,9 @@ Saving writes the active profile through `valeloot-filter.txt`; your bag recolou
 The editor is served from the mod over loopback, on `http://127.0.0.1:38512/`.
 
 - It binds **`127.0.0.1` only**. It is reachable from this machine and from nothing else.
-- It serves seven fixed routes: its embedded editor page, a state snapshot, filter saving, local profile
-  management, session alert history, sound previews for your own `.wav` files, and a health check.
+- It serves eight fixed routes: its embedded editor page, a state snapshot, filter saving, local profile
+  management, session alert history, bag-warning settings, sound previews for your own `.wav` files,
+  and a health check.
 - It carries **no game traffic**, and there is no network hook anywhere in the plugin.
 - Every request stays on `127.0.0.1` between the game and your browser. There is no outbound communication.
 - Turn it off with `Enabled = false` under `[Editor]` in `BepInEx/config/com.savi.valeloot.cfg`. No port is
@@ -352,8 +359,8 @@ The editor is served from the mod over loopback, on `http://127.0.0.1:38512/`.
 | `Highlight / HoverNote` | `true` | The tooltip line naming the matched rule. |
 | `Sound / Enabled` | `true` | Sounds on pickup. |
 | `Bag Indicator / Enabled` | `true` | Tint the HUD inventory button yellow or red as carried weight rises. |
-| `Bag Indicator / YellowPercent` | `60` | Percentage above which the button turns yellow. |
-| `Bag Indicator / RedPercent` | `80` | Percentage above which the button turns red. |
+| `Bag Indicator / YellowPercent` | `60` | Percentage above which the button turns yellow. Settable from the editor's **HUD weight** control. |
+| `Bag Indicator / RedPercent` | `80` | Percentage above which the button turns red. Settable from the editor's **HUD weight** control. |
 | `Bag Indicator / TintStrength` | `0.85` | Yellow/red warning-tint strength, from `0.10` to `1.00`. |
 | `Editor / Enabled` | `true` | The loopback editor server. |
 | `Editor / Port` | `38512` | Its port. |

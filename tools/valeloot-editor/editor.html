@@ -150,6 +150,27 @@ main{flex:1;display:grid;grid-template-columns:360px minmax(420px,1fr) 360px;min
 .tally b{color:var(--ink);font-weight:600}
 .tally .lit b{color:var(--gold)}
 .tally s{text-decoration:none;color:var(--line2)}
+.stagehead .bagwarn{margin-left:auto;white-space:nowrap}
+.bagsettings{width:min(440px,calc(100vw - 32px));padding:0;color:var(--ink);background:var(--panel);
+  border:1px solid var(--gold-dim);border-radius:6px;box-shadow:0 24px 70px rgba(0,0,0,.78)}
+.bagsettings::backdrop{background:rgba(4,7,6,.78);backdrop-filter:blur(2px)}
+.bagsettings form{padding:18px}
+.bagsettings h3{margin:0 0 5px;color:var(--gold);font-size:15px;letter-spacing:1.4px;text-transform:uppercase}
+.bagsettings p{margin:0 0 15px;color:var(--dim);font-size:12.5px;line-height:1.55}
+.bagsettings .thresholds{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bagsettings label{display:flex;flex-direction:column;gap:5px;color:var(--faint);font:10.5px var(--mono);
+  letter-spacing:.7px;text-transform:uppercase}
+.bagsettings .number{display:flex;align-items:center;gap:6px;padding:7px 9px;background:var(--sunk);
+  border:1px solid var(--line2);border-radius:4px;color:var(--dim);font:13px var(--mono)}
+.bagsettings input{min-width:0;width:100%;padding:0;background:transparent;color:var(--ink);border:0;
+  font:15px var(--mono)}
+.bagsettings input:focus{outline:0}
+.bagsettings .number:focus-within{border-color:var(--gold)}
+.bagsettings .disabled{margin:12px 0 0;padding:8px 10px;border-left:2px solid var(--warn);
+  background:rgba(224,167,46,.06);color:var(--warn)}
+.bagsettings .persist{margin:13px 0 0;color:var(--faint);font-size:11.5px}
+.bagsettings .error{min-height:20px;margin-top:7px;color:var(--bad);font-size:11.5px}
+.bagsettings .actions{display:flex;justify-content:flex-end;gap:7px;margin-top:6px}
 /**
  * The find box, above the grid.
  *
@@ -468,15 +489,14 @@ h3.sec{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(
 #coach .v{color:#8fc4ef}
 #coach .n{color:var(--warn);font-variant-numeric:tabular-nums}
 .ac{position:absolute;z-index:30;background:#0a0e0c;border:1px solid var(--line2);border-radius:4px;
-  box-shadow:0 14px 32px rgba(0,0,0,.65);max-height:204px;overflow:auto;min-width:0;padding:3px}
-.ac div{padding:4px 8px;border-radius:3px;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12px}
+  box-shadow:0 14px 32px rgba(0,0,0,.65);max-height:260px;overflow:auto;min-width:0;padding:3px}
+.ac div{padding:5px 8px;border-radius:3px;cursor:pointer;display:grid;
+  grid-template-columns:minmax(0,1fr);gap:2px;font-size:12px}
 .ac div.on{background:rgba(200,169,97,.14)}
-.ac b{min-width:0;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;
-  color:var(--ink);font-family:var(--mono);font-size:11.5px;flex:0 0 auto}
-.ac .desc{min-width:0;color:var(--faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;flex:1 100 0}
-.ac .meta{margin-left:auto;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:var(--gold-dim);font:10.5px var(--mono);flex:0 1 auto}
+.ac b{min-width:0;font-weight:600;color:var(--ink);font-family:var(--mono);font-size:11.5px;
+  overflow-wrap:anywhere}
+.ac .desc{min-width:0;color:var(--faint);font-size:11px;line-height:1.35;overflow-wrap:anywhere}
+.ac .meta{min-width:0;color:var(--gold-dim);font:10.5px var(--mono);overflow-wrap:anywhere}
 .txtfoot{flex:none;display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--line);
   font-size:11.5px;color:var(--faint)}
 
@@ -597,6 +617,7 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
     <div class="stagehead">
       <h2>your bag, as the filter paints it</h2>
       <div class="tally" id="tally"></div>
+      <button class="btn tiny bagwarn" id="bag-settings-open" title="set the HUD carried-weight warning thresholds" hidden>HUD weight warning</button>
     </div>
     <div class="bagfind">
       <input id="bagfind" type="search" placeholder="find in bag — name, type or id" autocomplete="off" spellcheck="false">
@@ -608,6 +629,32 @@ footer .path{margin-left:auto;font:11px var(--mono);color:var(--faint);overflow:
   </section>
   <aside id="act" aria-label="item match inspector"></aside>
 </main>
+<dialog class="bagsettings" id="bag-settings" aria-labelledby="bag-settings-title">
+  <form id="bag-settings-form">
+    <h3 id="bag-settings-title">HUD bag weight warning</h3>
+    <p>The inventory button stays unchanged below the first cutoff, turns yellow above it, then red
+      above the second.</p>
+    <div class="thresholds">
+      <label>Yellow above
+        <span class="number"><input id="bag-yellow" name="yellowPercent" type="number" min="1" max="98"
+          step="1" inputmode="numeric" required><span>%</span></span>
+      </label>
+      <label>Red above
+        <span class="number"><input id="bag-red" name="redPercent" type="number" min="2" max="99"
+          step="1" inputmode="numeric" required><span>%</span></span>
+      </label>
+    </div>
+    <p class="disabled" id="bag-settings-disabled" hidden>The bag indicator is disabled in
+      <code>com.savi.valeloot.cfg</code>. These cutoffs will be ready if you enable it.</p>
+    <p class="persist">Saved in <code>BepInEx/config/com.savi.valeloot.cfg</code>, outside the plugin
+      folder, so an upgrade keeps your values.</p>
+    <div class="error" id="bag-settings-error" role="status" aria-live="polite"></div>
+    <div class="actions">
+      <button class="btn" id="bag-settings-cancel" type="button">cancel</button>
+      <button class="btn save" id="bag-settings-save" type="submit">Save thresholds</button>
+    </div>
+  </form>
+</dialog>
 
 <!--
   `#conn` is the connection disclosure, and it lives here on purpose.
@@ -754,6 +801,21 @@ let expectations = loadExpectations();
 let profiles = [];
 let focusRule = null;          // where the keyboard should land after a reorder
 let fileState = { filter: null, items: null, bag: null };
+let bagSettings = { enabled: true, yellowPercent: 60, redPercent: 80 };
+function statRecord(code) {
+  const found = VL.STAT_VOCABULARY && VL.STAT_VOCABULARY[code];
+  return {
+    label: found && found.label
+      ? found.label
+      : String(code).replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
+    aliases: found && Array.isArray(found.aliases) ? found.aliases : [],
+  };
+}
+
+function statNameHtml(code) {
+  return '<span class="stat-name" title="Internal: ' + esc(code) + '">'
+    + esc(statRecord(code).label) + '</span>';
+}
 
 const src = $('src');
 /** What is typed in the bag's find box. Presentation only — never saved, never part of a rule. */
@@ -1328,8 +1390,8 @@ function renderTally() {
 function statLine(item) {
   return item.lines.map((l) => {
     const roll = l.rollPct === null ? '' : (l.rollPct > 100 ? '<u>' + l.rollPct + '%</u>' : l.rollPct + '%');
-    const printed = l.printed === null ? '<s>?</s>' : '+' + l.printed;
-    return esc(l.stat) + ' ' + printed + (roll ? ' ' + roll : '');
+    const printed = VL.formatPrintedValue(l.printed);
+    return statNameHtml(l.stat) + ' ' + printed + (roll ? ' ' + roll : '');
   }).join('  ');
 }
 
@@ -1777,40 +1839,60 @@ let acIndex = 0;
 let acRange = null;
 
 function contextAt() {
-  const upto = src.value.slice(0, src.selectionStart);
-  const lineStart = upto.lastIndexOf('\n') + 1;
-  const line = upto.slice(lineStart);
-  if (line.trimStart().startsWith('#')) return null;
-  const indented = /^\s/.test(line);
-  const words = line.trimStart().split(/\s+/);
-  const first = (words[0] || '').toLowerCase();
-  const tail = (token) => ({ token: token || '', from: lineStart + line.length - (token || '').length });
-
-  if (!indented && words.length <= 1) return Object.assign({ kind: 'keyword' }, tail(words[0]));
-  if (!indented && (first === 'alwaysshow' || first === 'alwayshide')) return itemContext(line, lineStart);
-  if (!indented) return null;
-  if (words.length <= 1) return Object.assign({ kind: 'cond' }, tail(words[0]));
-  if (first === 'name') return itemContext(line, lineStart);
-  if ((first === 'stat' || first === 'requirestat') && words.length === 2) {
-    return Object.assign({ kind: 'stat' }, tail(words[1]));
-  }
-  if (first === 'type') return Object.assign({ kind: 'type' }, tail(words[words.length - 1]));
-  if (first === 'highlight' && words.length === 2) return Object.assign({ kind: 'level' }, tail(words[1]));
-  if (first === 'background' && words.length === 2) return Object.assign({ kind: 'background' }, tail(words[1]));
-  if (first === 'border' && words.length === 2) return Object.assign({ kind: 'border' }, tail(words[1]));
-  if (first === 'sound' && words.length === 2) return Object.assign({ kind: 'sound' }, tail(words[1]));
-  return null;
+  return VL.completionContextAt(src.value, src.selectionStart);
 }
-function itemContext(line, lineStart) {
-  const after = line.replace(/^\s*\S+\s*/, '');
-  return { kind: 'item', token: after.replace(/^"/, ''), from: lineStart + line.length - after.length };
+
+const STAT_OPERATORS = [
+  ['>=', 'at least this value'],
+  ['>', 'strictly above this value'],
+];
+const BOUND_OPERATORS = [
+  ...STAT_OPERATORS,
+  ['<=', 'at most this value'],
+  ['<', 'strictly below this value'],
+  ['=', 'exactly this value'],
+];
+const STAT_VALUES = [
+  ['1', 'printed value +1 or better'],
+  ['3', 'printed value +3 or better'],
+  ['5', 'printed value +5 or better'],
+  ['10', 'printed value +10 or better'],
+  ['90%', 'top 10% of this stat\u2019s legal roll range'],
+];
+const COUNT_VALUES = [['1'], ['2'], ['3'], ['4']];
+const PERCENT_VALUES = [['35'], ['50'], ['75'], ['90']];
+const REFINE_VALUES = [['1'], ['5'], ['10']];
+const THRESHOLD_VALUES = [['90', 'the default high-roll cutoff']];
+
+function fixedCandidates(options, hit) {
+  return options.filter(([value]) => hit(value)).map(([text, help]) => ({ text, help }));
+}
+
+function usedValues(keyword) {
+  const currentLine = src.value.slice(0, src.selectionStart).split('\n').length - 1;
+  const pattern = new RegExp('^\\s*' + keyword + '\\s+(.+?)\\s*$', 'i');
+  const seen = new Set();
+  return src.value.split('\n').flatMap((line, index) => {
+    if (index === currentLine) return [];
+    const match = pattern.exec(line);
+    const value = match ? match[1].replace(/^\"|\"$/g, '') : '';
+    if (!value || seen.has(value.toLowerCase())) return [];
+    seen.add(value.toLowerCase());
+    return [value];
+  });
 }
 
 function statCandidates(query) {
-  const aliases = Array.isArray(VL.STAT_ALIASES) ? VL.STAT_ALIASES : [];
-  const available = new Set(vocab.stats.map((stat) => stat.toLowerCase()));
-  const paired = new Set();
-  const out = [];
+  const legacyAliases = Array.isArray(VL.STAT_ALIASES) ? VL.STAT_ALIASES : [];
+  const canonicalBySpelling = new Map();
+  const legacyTermsByCanonical = new Map();
+  for (const alias of legacyAliases) {
+    const canonical = alias.internal.toLowerCase();
+    canonicalBySpelling.set(alias.friendly.toLowerCase(), alias.internal);
+    canonicalBySpelling.set(canonical, alias.internal);
+    legacyTermsByCanonical.set(canonical, [alias.friendly, alias.internal]);
+  }
+  const seen = new Set();
   const q = query.toLowerCase();
   const rank = (value) => {
     const lower = value.toLowerCase();
@@ -1820,25 +1902,25 @@ function statCandidates(query) {
     return q.length > 1 && lower.includes(q) ? 2 : -1;
   };
 
-  // One concept per alias pair. The spelling a player writes is primary; the game's canonical enum
-  // name remains visible and searchable without becoming a duplicate row.
-  for (const alias of aliases) {
-    const friendly = alias.friendly.toLowerCase();
-    const internal = alias.internal.toLowerCase();
-    if (!available.has(internal) && !available.has(friendly)) continue;
-    paired.add(friendly);
-    paired.add(internal);
-    const score = Math.min(...[rank(alias.friendly), rank(alias.internal)].filter((value) => value >= 0));
-    if (!Number.isFinite(score)) continue;
-    out.push({ text: alias.friendly, meta: alias.internal, rank: score });
-  }
-
-  for (const stat of vocab.stats) {
-    if (paired.has(stat.toLowerCase())) continue;
-    const score = rank(stat);
-    if (score >= 0) out.push({ text: stat, rank: score });
-  }
-  return out.sort((a, b) => a.rank - b.rank || a.text.localeCompare(b.text))
+  return vocab.stats.flatMap((availableStat) => {
+    const stat = canonicalBySpelling.get(availableStat.toLowerCase()) || availableStat;
+    const key = stat.toLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const record = statRecord(stat);
+    let score = -1;
+    const consider = (spelling) => {
+      const candidate = rank(spelling);
+      if (candidate >= 0) score = score < 0 ? candidate : Math.min(score, candidate);
+    };
+    consider(availableStat);
+    consider(stat);
+    consider(record.label);
+    for (const alias of record.aliases) consider(alias);
+    for (const alias of legacyTermsByCanonical.get(key) || []) consider(alias);
+    if (score < 0) return [];
+    return [{ text: record.label, insert: stat, help: 'writes ' + stat, rank: score }];
+  }).sort((a, b) => a.rank - b.rank || a.text.localeCompare(b.text))
     .slice(0, 60).map(({ rank: _rank, ...item }) => item);
 }
 
@@ -1865,6 +1947,15 @@ function candidates(context) {
     return vocab.items.filter((i) => hit(i.name)).slice(0, 80)
       .map((i) => ({ text: i.name, meta: i.type + (i.level ? ' · lv' + i.level : '') }));
   }
+  if (context.kind === 'statOperator') return fixedCandidates(BOUND_OPERATORS, hit);
+  if (context.kind === 'operator') return fixedCandidates(BOUND_OPERATORS, hit);
+  if (context.kind === 'minimumOperator') return fixedCandidates(STAT_OPERATORS, hit);
+  if (context.kind === 'statValue') return fixedCandidates(STAT_VALUES, hit);
+  if (context.kind === 'countValue') return fixedCandidates(COUNT_VALUES, hit);
+  if (context.kind === 'percentValue') return fixedCandidates(PERCENT_VALUES, hit);
+  if (context.kind === 'refineValue') return fixedCandidates(REFINE_VALUES, hit);
+  if (context.kind === 'thresholdValue') return fixedCandidates(THRESHOLD_VALUES, hit);
+  if (context.kind === 'tag') return usedValues('Tag').filter(hit).map((text) => ({ text }));
   return [];
 }
 
@@ -1901,8 +1992,10 @@ function accept(index) {
   if (!item || !acRange) return;
   const before = src.value.slice(0, acRange.from);
   const after = src.value.slice(src.selectionStart);
-  const quoted = acRange.kind === 'item' && /\s/.test(item.text) ? '"' + item.text + '"' : item.text;
-  const insert = quoted + (acRange.kind === 'cond' || acRange.kind === 'keyword' ? ' ' : '');
+  const chosen = item.insert || item.text;
+  const quoted = acRange.kind === 'item' && /\s/.test(chosen) ? '"' + chosen + '"' : chosen;
+  const spaced = ['cond', 'keyword', 'statOperator', 'operator', 'minimumOperator'].includes(acRange.kind);
+  const insert = quoted + (spaced ? ' ' : '');
   src.value = before + insert + after;
   const caret = before.length + insert.length;
   src.setSelectionRange(caret, caret);
@@ -2163,6 +2256,7 @@ const STATE_URL = 'api/state';
 const FILTER_URL = 'api/filter';
 const PROFILES_URL = 'api/profiles';
 const HISTORY_URL = 'api/history';
+const SETTINGS_URL = 'api/settings';
 
 /**
  * Which mode, decided ONCE, by asking rather than by guessing.
@@ -2251,6 +2345,14 @@ function applyState(state, keepText) {
   // The .wav files the mod can actually see. Null in file mode, where this page has no way to look
   // in the folder and the five synthesised built-ins are the honest best guess.
   served.sounds = Array.isArray(state.sounds) && state.sounds.length ? state.sounds.slice() : null;
+  const indicator = state.bagIndicator || {};
+  const yellow = Number(indicator.yellowPercent);
+  const red = Number(indicator.redPercent);
+  if (Number.isInteger(yellow) && yellow >= 1 && yellow <= 98
+      && Number.isInteger(red) && red >= 2 && red <= 99 && yellow < red) {
+    bagSettings = { enabled: indicator.enabled !== false, yellowPercent: yellow, redPercent: red };
+    renderBagSettings(false);
+  }
   profiles = Array.isArray(state.profiles) ? state.profiles.map((entry) => ({
     name: String(entry.name || ''), active: entry.active === true,
   })).filter((entry) => entry.name) : [];
@@ -2429,6 +2531,86 @@ async function saveToMod() {
   }
 }
 
+function renderBagSettings(forceInputs) {
+  const button = $('bag-settings-open');
+  button.textContent = 'HUD weight ' + bagSettings.yellowPercent + '% / ' + bagSettings.redPercent + '%';
+  button.title = 'yellow above ' + bagSettings.yellowPercent + '%, red above ' + bagSettings.redPercent
+    + '% — saved across upgrades';
+  $('bag-settings-disabled').hidden = bagSettings.enabled;
+  if (forceInputs || !$('bag-settings').open) {
+    $('bag-yellow').value = String(bagSettings.yellowPercent);
+    $('bag-red').value = String(bagSettings.redPercent);
+  }
+}
+
+function openBagSettings() {
+  renderBagSettings(true);
+  $('bag-settings-error').textContent = '';
+  $('bag-settings').showModal();
+  $('bag-yellow').focus();
+  $('bag-yellow').select();
+}
+
+async function saveBagSettings(event) {
+  event.preventDefault();
+  const yellow = Number($('bag-yellow').value);
+  const red = Number($('bag-red').value);
+  const error = $('bag-settings-error');
+  if (!Number.isInteger(yellow) || yellow < 1 || yellow > 98) {
+    error.textContent = 'Yellow must be a whole percentage from 1 to 98.';
+    $('bag-yellow').focus();
+    return;
+  }
+  if (!Number.isInteger(red) || red < 2 || red > 99) {
+    error.textContent = 'Red must be a whole percentage from 2 to 99.';
+    $('bag-red').focus();
+    return;
+  }
+  if (yellow >= red) {
+    error.textContent = 'Red must be greater than yellow.';
+    $('bag-red').focus();
+    return;
+  }
+
+  const button = $('bag-settings-save');
+  button.disabled = true;
+  error.textContent = 'saving\u2026';
+  const params = new URLSearchParams({
+    yellowPercent: String(yellow),
+    redPercent: String(red),
+  });
+  let response;
+  try {
+    response = await fetch(SETTINGS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8' },
+      body: params.toString(),
+      cache: 'no-store',
+    });
+  } catch (requestError) {
+    const reason = requestError && requestError.message ? requestError.message : String(requestError);
+    error.textContent = 'ValeLoot stopped answering: ' + reason;
+    button.disabled = false;
+    loseConnection(reason);
+    return;
+  }
+
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body || body.ok !== true) {
+    error.textContent = body && body.error ? String(body.error)
+      : 'the mod answered ' + response.status + ' ' + response.statusText;
+    button.disabled = false;
+    return;
+  }
+
+  bagSettings = { enabled: bagSettings.enabled, yellowPercent: yellow, redPercent: red };
+  renderBagSettings(true);
+  button.disabled = false;
+  $('bag-settings').close();
+  say('Saved the HUD bag warning: yellow above ' + yellow + '%, red above ' + red
+    + '%. It is live now and stored in com.savi.valeloot.cfg, so upgrades keep it.', false, true);
+}
+
 function renderProfiles() {
   const bar = $('profilebar');
   bar.hidden = mode !== 'served' || !profiles.length;
@@ -2533,6 +2715,8 @@ function applyModeChrome() {
     ? 'pull a fresh bag and rules from the game — do this after looting'
     : 'refresh all three files from the folder';
   $('history-open').hidden = !servedNow;
+  $('bag-settings-open').hidden = !servedNow;
+  if (!servedNow && $('bag-settings').open) $('bag-settings').close();
   if (!servedNow) $('history').classList.remove('on');
 }
 
@@ -2820,7 +3004,7 @@ function renderAct() {
     + '<button class="mk" data-expect="result">save current result</button></div>'
     + '<p class="meta" style="margin:7px 0 0">Checks warn after edits and reordering. They never force a result or block Save.</p></div>'
     + '<div class="inspect-sec"><h4>item facts</h4><div class="inspect-stats">'
-    + (item.lines.length ? item.lines.map((line) => esc(line.stat) + ' '
+    + (item.lines.length ? item.lines.map((line) => statNameHtml(line.stat) + ' '
       + (line.printed === null ? '?' : '+' + line.printed)
       + (line.rollPct === null ? '' : line.rollPct > 100 ? ' <u>' + line.rollPct + '% over</u>' : ' ' + line.rollPct + '%')).join('<br>')
       : '<em>no substat lines</em>') + '</div></div>'
@@ -2828,7 +3012,7 @@ function renderAct() {
     + '<button class="mk" data-mk="name">Name <b>"' + esc(item.name) + '"</b></button>'
     + '<button class="mk" data-mk="type">Type <b>' + esc(item.slotType) + '</b></button>'
     + (item.topRolls ? '<button class="mk" data-mk="top">TopRolls <b>&gt;= ' + item.topRolls + '</b></button>' : '')
-    + (item.lines.length ? '<button class="mk" data-mk="stat">Stat <b>' + esc(item.lines[0].stat) + ' &gt;= '
+    + (item.lines.length ? '<button class="mk" data-mk="stat">Stat <b>' + statNameHtml(item.lines[0].stat) + ' &gt;= '
       + (item.lines[0].rollPct === null ? 90 : Math.min(100, item.lines[0].rollPct)) + '%</b></button>' : '')
     + '</div></div><div class="inspect-sec"><h4>just this item</h4><div class="row">'
     + '<button class="mk" data-mk="pin">always show it</button>'
@@ -2877,7 +3061,7 @@ function showNote(event, item) {
     + ' · ' + item.highRolls + ' high roll' + (item.highRolls === 1 ? '' : 's')
     + ' <span class="rollhi">(at ' + (plan ? plan.threshold : 90) + '%)</span></div>';
   html += '<div class="st">' + (item.lines.length
-    ? item.lines.map((l) => esc(l.stat) + ' ' + (l.printed === null ? '<s>?</s>' : '+' + l.printed)
+    ? item.lines.map((l) => statNameHtml(l.stat) + ' ' + VL.formatPrintedValue(l.printed)
       + (l.rollPct === null ? '' : (l.rollPct > 100 ? ' <u>' + l.rollPct + '% over</u>' : ' ' + l.rollPct + '%'))).join('<br>')
     : '<em>no substat lines</em>') + '</div>';
   box.innerHTML = html;
@@ -3160,6 +3344,18 @@ src.addEventListener('click', coach);
 src.addEventListener('keyup', (event) => { if (event.key.startsWith('Arrow')) coach(); });
 src.addEventListener('keydown', (event) => {
   if (event.ctrlKey && event.code === 'Space') { event.preventDefault(); showAC(true); return; }
+  if (event.key === 'Tab') {
+    if (!event.shiftKey && acItems.length) { event.preventDefault(); accept(acIndex); return; }
+    event.preventDefault();
+    const changed = VL.editIndent(src.value, src.selectionStart, src.selectionEnd, event.shiftKey);
+    src.value = changed.text;
+    src.setSelectionRange(changed.selectionStart, changed.selectionEnd);
+    hideAC();
+    refresh();
+    src.focus();
+    src.setSelectionRange(changed.selectionStart, changed.selectionEnd);
+    return;
+  }
   if (!acItems.length) return;
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault();
@@ -3170,13 +3366,16 @@ src.addEventListener('keydown', (event) => {
     });
     return;
   }
-  if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); accept(acIndex); return; }
+  if (event.key === 'Enter') { event.preventDefault(); accept(acIndex); return; }
   if (event.key === 'Escape') hideAC();
 });
 
 $('save').addEventListener('click', saveFilter);
 $('download').addEventListener('click', downloadText);
 $('reload').addEventListener('click', reread);
+$('bag-settings-open').addEventListener('click', openBagSettings);
+$('bag-settings-cancel').addEventListener('click', () => $('bag-settings').close());
+$('bag-settings-form').addEventListener('submit', saveBagSettings);
 $('profile').addEventListener('change', async (event) => {
   try { await profileAction('activate', event.target.value); say('Activated profile ' + event.target.value + '.'); }
   catch (error) { say('Could not activate profile: ' + error.message, true); renderProfiles(); }
@@ -3299,9 +3498,13 @@ $('helpbody').innerHTML = ''
   + 'rules, your bag and every item name come from the running game, and <b>Save</b> hands the text '
   + 'back for the mod to write. The footer says so, with the port, whenever that is what is '
   + 'happening.</p>'
-  + '<p>That server carries this page, your rules and your bag, and nothing else. It is not connected '
-  + 'to the game\u2019s own network traffic, reads no packets, and answers only to this machine. '
-  + 'Nothing you type here leaves it.</p>'
+  + '<p>That server carries this page, your rules, your bag and the bag-warning settings, and nothing '
+  + 'else. It is not connected to the game\u2019s own network traffic, reads no packets, and answers only '
+  + 'to this machine. Nothing you type here leaves it.</p>'
+  + '<h3>Bag weight warning</h3>'
+  + '<p>The <b>HUD weight</b> control above your bag sets when the game\u2019s inventory button turns '
+  + 'yellow and red. It is available when this page is opened with F8, applies immediately, and saves '
+  + 'to <code>com.savi.valeloot.cfg</code>, so replacing the plugin during an upgrade does not reset it.</p>'
   + '<p>The other way is to open the file by hand, which is what you are doing if you were asked for '
   + 'a folder. That still works, offline, with the game shut, and it is the fallback if something on '
   + 'your machine has taken the port.</p>'
@@ -3378,6 +3581,7 @@ window.ValeLootEditor = {
     text: src.value,
     mode,
     served: { port: served.port, version: served.version, lost: served.lost, coverage: served.coverage },
+    bagIndicator: { ...bagSettings },
     gate: $('gate').style.display !== 'none',
     errors: plan.errors,
     rules: plan.blocks.map((b, i) => ({

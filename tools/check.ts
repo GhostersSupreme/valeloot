@@ -43,9 +43,9 @@ const steps: readonly Step[] = [
     meaning: 'the vendored parser does not type-check; nothing else would notice',
   },
   {
-    name: 'filter behavior',
-    argv: ['bun', 'test', 'tools/conformance/backgrounds.test.ts', 'tools/conformance/statmatches.test.ts', 'tools/conformance/roll-semantics.test.ts', 'tools/conformance/stat-aliases.test.ts'],
-    meaning: 'a filter parser or evaluator contract is broken',
+    name: 'editor and filter behavior',
+    argv: ['bun', 'test', 'tools/valeloot-editor/autocomplete.test.ts', 'tools/valeloot-editor/display.test.ts', 'tools/conformance/backgrounds.test.ts', 'tools/conformance/statmatches.test.ts', 'tools/conformance/roll-semantics.test.ts', 'tools/conformance/stat-aliases.test.ts'],
+    meaning: 'an editor autocomplete, filter parser, or evaluator contract is broken',
   },
   {
     name: 'filter language conformance',
