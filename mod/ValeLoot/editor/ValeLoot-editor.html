@@ -862,7 +862,7 @@ function matchLoot(item, rules, context) {
 function matchesStat(item, condition) {
   const wanted = canonicalStatName(condition.stat).toLowerCase();
   const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === wanted);
-  return Boolean(line) && (condition.minRollPct === undefined || line.rollPct !== null && line.rollPct >= condition.minRollPct) && (condition.minValue === undefined || line.base >= condition.minValue);
+  return Boolean(line) && (condition.minRollPct === undefined || line.rollPct !== null && line.rollPct >= condition.minRollPct) && (condition.maxRollPct === undefined || line.rollPct !== null && line.rollPct <= condition.maxRollPct) && (condition.minValue === undefined || line.base >= condition.minValue) && (condition.maxValue === undefined || line.base <= condition.maxValue);
 }
 function matchesCondition(item, when, context) {
   if (when.slotTypes?.length && !when.slotTypes.includes(item.slotType))
@@ -1017,12 +1017,29 @@ function explainCondition(item, when, context) {
     const over = item.lines.some((line) => line.over);
     add("overroll", "Over-roll", when.overRoll ? "present" : "absent", over ? "present" : "absent", over === when.overRoll);
   }
+  const statBounds = (condition) => {
+    const parts = [];
+    if (condition.minRollPct !== undefined && condition.maxRollPct !== undefined && condition.minRollPct === condition.maxRollPct) {
+      parts.push(`roll exactly ${condition.minRollPct}%`);
+    } else {
+      if (condition.minRollPct !== undefined)
+        parts.push(`roll at least ${condition.minRollPct}%`);
+      if (condition.maxRollPct !== undefined)
+        parts.push(`roll at most ${condition.maxRollPct}%`);
+    }
+    if (condition.minValue !== undefined && condition.maxValue !== undefined && condition.minValue === condition.maxValue) {
+      parts.push(`value exactly ${condition.minValue}`);
+    } else {
+      if (condition.minValue !== undefined)
+        parts.push(`value at least ${condition.minValue}`);
+      if (condition.maxValue !== undefined)
+        parts.push(`value at most ${condition.maxValue}`);
+    }
+    return parts.join(", ") || "present";
+  };
   for (const condition of when.requiredStats ?? []) {
     const pass = matchesStat(item, condition);
-    const bounds = [
-      condition.minRollPct === undefined ? "" : `${condition.minRollPct}% roll`,
-      condition.minValue === undefined ? "" : `value ${condition.minValue}`
-    ].filter(Boolean).join(", ") || "present";
+    const bounds = statBounds(condition);
     const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === canonicalStatName(condition.stat).toLowerCase());
     const actual = !line ? "missing" : `${line.base}${line.rollPct === null ? "" : ` · ${Math.round(line.rollPct)}%`}`;
     add(`required-stat-${condition.stat}`, `Required ${condition.stat}`, bounds, actual, pass);
@@ -1034,10 +1051,7 @@ function explainCondition(item, when, context) {
       const pass = matchesStat(item, condition);
       if (pass)
         statHits++;
-      const bounds = [
-        condition.minRollPct === undefined ? "" : `${condition.minRollPct}% roll`,
-        condition.minValue === undefined ? "" : `value ${condition.minValue}`
-      ].filter(Boolean).join(", ") || "present";
+      const bounds = statBounds(condition);
       const line = item.lines.find((candidate) => candidate.stat.toLowerCase() === canonicalStatName(condition.stat).toLowerCase());
       const actual = !line ? "missing" : `${line.base}${line.rollPct === null ? "" : ` · ${Math.round(line.rollPct)}%`}`;
       add(`stat-${condition.stat}`, condition.stat, bounds, actual, pass);
@@ -1217,17 +1231,37 @@ function parseRuleBlock(block, index) {
   const parseStat = (line, text, remainder) => {
     const match = /^(\S+)\s*([<>]=?|=)\s*(-?\d+(?:\.\d+)?)(%?)$/.exec(remainder);
     if (!match) {
-      errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi >= 90%" (roll quality)' });
+      errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi <= 90%" (roll quality)' });
       return;
     }
     const [, stat, op, rawValue, percent] = match;
-    if (op !== ">=" && op !== ">") {
-      errors.push({ line, text, message: "Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)" });
-      return;
-    }
     const raw = Number(rawValue);
-    const value = op === ">" ? Math.floor(raw) + 1 : Math.ceil(raw);
-    return percent ? { stat: canonicalStatName(stat), minRollPct: value } : { stat: canonicalStatName(stat), minValue: value };
+    let min;
+    let max;
+    if (op === "=") {
+      if (!Number.isInteger(raw)) {
+        errors.push({ line, text, message: "Stat equality needs a whole number because displayed values and roll percentages are integral" });
+        return;
+      }
+      min = raw;
+      max = raw;
+    } else if (op === ">=")
+      min = Math.ceil(raw);
+    else if (op === ">")
+      min = Math.floor(raw) + 1;
+    else if (op === "<=")
+      max = Math.floor(raw);
+    else
+      max = Math.ceil(raw) - 1;
+    const condition = { stat: canonicalStatName(stat) };
+    if (percent) {
+      condition.minRollPct = min;
+      condition.maxRollPct = max;
+    } else {
+      condition.minValue = min;
+      condition.maxValue = max;
+    }
+    return condition;
   };
   const bound = (text, line, remainder, integral, apply) => {
     const match = /^([<>]=?|=)\s*(-?\d+(?:\.\d+)?)$/.exec(remainder);
@@ -1558,6 +1592,19 @@ function formatLootFilter(parsed) {
       return `${inclusive} ${nearest}`;
     return drift < 0.000001 ? `${strict} ${nearest}` : `${inclusive} ${value}`;
   };
+  const statBound = (stat) => {
+    const percent = stat.minRollPct !== undefined || stat.maxRollPct !== undefined;
+    const min = percent ? stat.minRollPct : stat.minValue;
+    const max = percent ? stat.maxRollPct : stat.maxValue;
+    const suffix = percent ? "%" : "";
+    if (min !== undefined && max !== undefined && min === max)
+      return `= ${min}${suffix}`;
+    if (min !== undefined && max === undefined)
+      return `>= ${min}${suffix}`;
+    if (max !== undefined && min === undefined)
+      return `<= ${max}${suffix}`;
+    return ">= 0";
+  };
   for (const rule of parsed.rules) {
     out.push(`${rule.mute ? "Hide" : "Show"} "${rule.name}"`);
     const w = rule.when;
@@ -1566,30 +1613,15 @@ function formatLootFilter(parsed) {
     if (w.slotTypes?.length)
       out.push(`    Type      ${w.slotTypes.join(", ")}`);
     for (const stat of w.requiredStats ?? []) {
-      if (stat.minRollPct !== undefined)
-        out.push(`    RequireStat ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
-      else if (stat.minValue !== undefined)
-        out.push(`    RequireStat ${stat.stat} >= ${stat.minValue}`);
-      else
-        out.push(`    RequireStat ${stat.stat} >= 0`);
+      out.push(`    RequireStat ${stat.stat} ${statBound(stat)}`);
     }
     for (const stat of w.stats ?? []) {
-      if (stat.minRollPct !== undefined)
-        out.push(`    Stat      ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
-      else if (stat.minValue !== undefined)
-        out.push(`    Stat      ${stat.stat} >= ${stat.minValue}`);
-      else
-        out.push(`    Stat      ${stat.stat} >= 0`);
+      out.push(`    Stat      ${stat.stat} ${statBound(stat)}`);
     }
     for (const group of w.anyOfStats ?? []) {
       out.push("    AnyOf");
       for (const stat of group) {
-        if (stat.minRollPct !== undefined)
-          out.push(`        Stat  ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
-        else if (stat.minValue !== undefined)
-          out.push(`        Stat  ${stat.stat} >= ${stat.minValue}`);
-        else
-          out.push(`        Stat  ${stat.stat} >= 0`);
+        out.push(`        Stat  ${stat.stat} ${statBound(stat)}`);
       }
     }
     const boundedStatMatches = w.minStatMatches !== undefined || w.maxStatMatches !== undefined;
@@ -2929,10 +2961,9 @@ function candidates(context) {
     return vocab.items.filter((i) => hit(i.name)).slice(0, 80)
       .map((i) => ({ text: i.name, meta: i.type + (i.level ? ' · lv' + i.level : '') }));
   }
-  if (context.kind === 'statOperator' || context.kind === 'minimumOperator') {
-    return fixedCandidates(STAT_OPERATORS, hit);
-  }
+  if (context.kind === 'statOperator') return fixedCandidates(BOUND_OPERATORS, hit);
   if (context.kind === 'operator') return fixedCandidates(BOUND_OPERATORS, hit);
+  if (context.kind === 'minimumOperator') return fixedCandidates(STAT_OPERATORS, hit);
   if (context.kind === 'statValue') return fixedCandidates(STAT_VALUES, hit);
   if (context.kind === 'countValue') return fixedCandidates(COUNT_VALUES, hit);
   if (context.kind === 'percentValue') return fixedCandidates(PERCENT_VALUES, hit);

@@ -157,6 +157,7 @@ Hide "vendor trash"
 | `AvgRoll < 35` | legacy alias for `AvgRollPct`; existing filters remain valid |
 | `Stat Agi >= 90%` | that stat's line rolled in the top tenth of its range |
 | `Stat Agi >= 3` | that stat *prints* at least 3 on this item |
+| `Stat DamageFromMagic <= -3` | that stat prints -3 or lower, so detrimental rolls can be matched by severity |
 | `RequireStat Agi >= 3` | a mandatory stat that is not counted by `StatMatches` |
 | `StatMatches >= 3` | at least this many of the listed `Stat` conditions must match |
 | `AnyOf` with indented `Stat` lines | at least one stat inside that group must match |
@@ -182,6 +183,9 @@ Presentation lines belong on `Show` blocks:
 `Stat Agi >= 3` asks what it *prints*. They are different questions with different answers: a 0% roll
 already prints two thirds of the maximum, so on an attribute that caps at 3, `>= 3` means maxed while
 `>= 90%` means genuinely lucky.
+
+`Stat`, `RequireStat`, and `Stat` lines inside `AnyOf` accept `>=`, `>`, `=`, `<`, and `<=` for both
+printed values and `%` roll quality. Values are integral: `< -2` is the same boundary as `<= -3`.
 
 ### Roll and artifact examples
 

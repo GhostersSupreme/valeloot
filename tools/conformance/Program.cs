@@ -85,6 +85,7 @@ internal static class Program
         VerifyRequireStat();
         VerifyAnyOf();
         VerifyDisplayedStatRules();
+        VerifyStatUpperBounds();
         VerifyStatAliases();
         VerifyChaosType();
 
@@ -339,6 +340,58 @@ internal static class Program
             Stats = new[] { new LootFilter.StatCondition { Stat = "Vit", MinRollPct = 90 } },
         }, "artifact percent form stays raw");
     }
+    /// <summary>Upper stat bounds target detrimental printed values and raw roll percentages.</summary>
+    private static void VerifyStatUpperBounds()
+    {
+        const string itemId = "negative-stat-item";
+        ItemCatalog.SetCap(itemId, 1, -6);
+
+        static LootFilter.LootCondition Parse(string body)
+        {
+            FilterParser.ParsedFilter parsed = FilterParser.Parse("Show \"negative\"\n" + body);
+            if (parsed.Errors.Length != 0 || parsed.Rules.Length != 1)
+                throw new InvalidOperationException($"could not parse negative-stat rule: {body}");
+            return parsed.Rules[0].When;
+        }
+
+        LootFilter.ItemFacts Item(int roll)
+        {
+            var item = new LootFilter.ItemFacts { Id = itemId };
+            item.AddStat("DamageFromMagic", 1, roll, "");
+            return item;
+        }
+
+        var missing = new LootFilter.ItemFacts { Id = itemId };
+        LootFilter.LootCondition inclusive = Parse("    Stat DamageFromMagic <= -5");
+        AssertCondition(true, Item(50), inclusive, "inclusive negative printed boundary");
+        AssertCondition(true, Item(100), inclusive, "negative printed value below boundary");
+        AssertCondition(false, Item(0), inclusive, "negative printed value above boundary");
+        AssertCondition(false, missing, inclusive, "missing negative stat");
+
+        LootFilter.LootCondition strict = Parse("    Stat DamageFromMagic < -5");
+        AssertCondition(true, Item(100), strict, "strict negative printed bound");
+        AssertCondition(false, Item(50), strict, "strict negative printed boundary");
+
+        LootFilter.LootCondition exact = Parse("    Stat DamageFromMagic = -5");
+        AssertCondition(true, Item(50), exact, "exact negative printed value");
+        AssertCondition(false, Item(100), exact, "value below exact negative bound");
+
+        LootFilter.LootCondition percent = Parse("    Stat DamageFromMagic <= 50%");
+        AssertCondition(true, Item(50), percent, "inclusive roll ceiling");
+        AssertCondition(false, Item(51), percent, "roll above inclusive ceiling");
+
+        LootFilter.LootCondition required = Parse("    RequireStat DamageFromMagic <= -5");
+        AssertCondition(true, Item(50), required, "required negative stat");
+        AssertCondition(false, Item(0), required, "required negative stat above boundary");
+
+        LootFilter.LootCondition anyOf = Parse(
+            "    AnyOf\n" +
+            "        Stat DamageFromMagic <= -5\n" +
+            "        Stat DamageFromMelee <= -5");
+        AssertCondition(true, Item(50), anyOf, "AnyOf negative stat alternative");
+        AssertCondition(false, missing, anyOf, "AnyOf missing negative stats");
+    }
+
 
     private static void AssertCondition(
         bool expected,
@@ -454,7 +507,9 @@ internal static class Program
                 json.Append("{\"stat\": ");
                 Str(json, stat.Stat);
                 json.Append(", \"minRollPct\": ").Append(Int(stat.MinRollPct))
+                    .Append(", \"maxRollPct\": ").Append(Int(stat.MaxRollPct))
                     .Append(", \"minValue\": ").Append(Int(stat.MinValue))
+                    .Append(", \"maxValue\": ").Append(Int(stat.MaxValue))
                     .Append('}');
             }
         }
@@ -470,7 +525,9 @@ internal static class Program
                 json.Append("{\"stat\": ");
                 Str(json, stat.Stat);
                 json.Append(", \"minRollPct\": ").Append(Int(stat.MinRollPct))
+                    .Append(", \"maxRollPct\": ").Append(Int(stat.MaxRollPct))
                     .Append(", \"minValue\": ").Append(Int(stat.MinValue))
+                    .Append(", \"maxValue\": ").Append(Int(stat.MaxValue))
                     .Append('}');
             }
         }
@@ -489,7 +546,9 @@ internal static class Program
                     json.Append("{\"stat\": ");
                     Str(json, stat.Stat);
                     json.Append(", \"minRollPct\": ").Append(Int(stat.MinRollPct))
+                        .Append(", \"maxRollPct\": ").Append(Int(stat.MaxRollPct))
                         .Append(", \"minValue\": ").Append(Int(stat.MinValue))
+                        .Append(", \"maxValue\": ").Append(Int(stat.MaxValue))
                         .Append('}');
                 }
                 json.Append(']');

@@ -276,19 +276,34 @@ function parseRuleBlock(block: Block, index: number): { rule: LootRule; errors: 
   const parseStat = (line: number, text: string, remainder: string): StatCondition | undefined => {
     const match = /^(\S+)\s*([<>]=?|=)\s*(-?\d+(?:\.\d+)?)(%?)$/.exec(remainder);
     if (!match) {
-      errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi >= 90%" (roll quality)' });
+      errors.push({ line, text, message: 'Stat needs e.g. "Stat Agi >= 3" (value) or "Stat Agi <= 90%" (roll quality)' });
       return undefined;
     }
     const [, stat, op, rawValue, percent] = match;
-    if (op !== '>=' && op !== '>') {
-      errors.push({ line, text, message: 'Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)' });
-      return undefined;
-    }
     const raw = Number(rawValue);
-    const value = op === '>' ? Math.floor(raw) + 1 : Math.ceil(raw);
-    return percent
-      ? { stat: canonicalStatName(stat!), minRollPct: value }
-      : { stat: canonicalStatName(stat!), minValue: value };
+    let min: number | undefined;
+    let max: number | undefined;
+    if (op === '=') {
+      if (!Number.isInteger(raw)) {
+        errors.push({ line, text, message: 'Stat equality needs a whole number because displayed values and roll percentages are integral' });
+        return undefined;
+      }
+      min = raw;
+      max = raw;
+    } else if (op === '>=') min = Math.ceil(raw);
+    else if (op === '>') min = Math.floor(raw) + 1;
+    else if (op === '<=') max = Math.floor(raw);
+    else max = Math.ceil(raw) - 1;
+
+    const condition: StatCondition = { stat: canonicalStatName(stat!) };
+    if (percent) {
+      condition.minRollPct = min;
+      condition.maxRollPct = max;
+    } else {
+      condition.minValue = min;
+      condition.maxValue = max;
+    }
+    return condition;
   };
 
 
@@ -623,27 +638,31 @@ export function formatLootFilter(parsed: Pick<ParsedFilter, 'rules' | 'overrides
     if (drift === 0) return `${inclusive} ${nearest}`;
     return drift < 1e-6 ? `${strict} ${nearest}` : `${inclusive} ${value}`;
   };
+  const statBound = (stat: StatCondition): string => {
+    const percent = stat.minRollPct !== undefined || stat.maxRollPct !== undefined;
+    const min = percent ? stat.minRollPct : stat.minValue;
+    const max = percent ? stat.maxRollPct : stat.maxValue;
+    const suffix = percent ? '%' : '';
+    if (min !== undefined && max !== undefined && min === max) return `= ${min}${suffix}`;
+    if (min !== undefined && max === undefined) return `>= ${min}${suffix}`;
+    if (max !== undefined && min === undefined) return `<= ${max}${suffix}`;
+    return '>= 0';
+  };
   for (const rule of parsed.rules) {
     out.push(`${rule.mute ? 'Hide' : 'Show'} "${rule.name}"`);
     const w = rule.when;
     if (w.names?.length) out.push(`    Name      ${w.names.map((n) => `"${n}"`).join(', ')}`);
     if (w.slotTypes?.length) out.push(`    Type      ${w.slotTypes.join(', ')}`);
     for (const stat of w.requiredStats ?? []) {
-      if (stat.minRollPct !== undefined) out.push(`    RequireStat ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
-      else if (stat.minValue !== undefined) out.push(`    RequireStat ${stat.stat} >= ${stat.minValue}`);
-      else out.push(`    RequireStat ${stat.stat} >= 0`);
+      out.push(`    RequireStat ${stat.stat} ${statBound(stat)}`);
     }
     for (const stat of w.stats ?? []) {
-      if (stat.minRollPct !== undefined) out.push(`    Stat      ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
-      else if (stat.minValue !== undefined) out.push(`    Stat      ${stat.stat} >= ${stat.minValue}`);
-      else out.push(`    Stat      ${stat.stat} >= 0`);
+      out.push(`    Stat      ${stat.stat} ${statBound(stat)}`);
     }
     for (const group of w.anyOfStats ?? []) {
       out.push('    AnyOf');
       for (const stat of group) {
-        if (stat.minRollPct !== undefined) out.push(`        Stat  ${stat.stat} >= ${Math.round(stat.minRollPct)}%`);
-        else if (stat.minValue !== undefined) out.push(`        Stat  ${stat.stat} >= ${stat.minValue}`);
-        else out.push(`        Stat  ${stat.stat} >= 0`);
+        out.push(`        Stat  ${stat.stat} ${statBound(stat)}`);
       }
     }
     const boundedStatMatches =

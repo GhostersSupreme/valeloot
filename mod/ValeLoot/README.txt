@@ -364,6 +364,8 @@ Conditions (all optional, and all must hold for the block to match):
                             whole non-equipment kinds named by ValeLoot
     Stat Agi >= 90%         that substat line rolled in the top 10% of its range
     Stat Agi >= 3           that substat PRINTS at least +3 on this item
+    Stat DamageFromMagic <= -3
+                            that substat PRINTS -3 or lower, for detrimental-stat severity
     RequireStat Agi >= 3    mandatory; never counted by StatMatches or changed by AnyStat
     StatMatches >= 3        at least three of the listed Stat conditions must match
     AnyStat                 one Stat line is enough (default: every Stat line must match)
@@ -376,6 +378,9 @@ Conditions (all optional, and all must hold for the block to match):
     OverRoll / NoOverRoll   has a line that rolled past 100% - the narrow over-roll form of Chaos
     Chaos / NoChaos         has an extra substat OR a roll past 100%, or has neither
     Favorite / NotFavorite  the game's own favourite flag
+
+Stat, RequireStat and Stat lines inside AnyOf accept >=, >, =, < and <= for both printed values
+and % roll quality. Values are integral: < -2 is equivalent to <= -3.
 
 Stat also accepts these player-facing names; the internal names remain valid:
 

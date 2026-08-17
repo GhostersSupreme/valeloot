@@ -335,23 +335,42 @@ internal static class FilterParser
         if (!match.Success)
         {
             errors.Add(new FilterError(line, text,
-                "Stat needs e.g. \"Stat Agi >= 90%\" (roll quality) or \"Stat Agi >= 3\" (the printed value)"));
+                "Stat needs e.g. \"Stat Agi >= 3\" (value) or \"Stat Agi <= 90%\" (roll quality)"));
             return null;
         }
 
         string op = match.Groups[2].Value;
-        if (op != ">=" && op != ">")
+        double raw = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+        int? minimum = null;
+        int? maximum = null;
+        switch (op)
         {
-            errors.Add(new FilterError(line, text,
-                "Stat supports only >= and > (a maximum on one line is not a filter anyone wants yet)"));
-            return null;
+            case "=":
+                if (raw != Math.Truncate(raw))
+                {
+                    errors.Add(new FilterError(line, text,
+                        "Stat equality needs a whole number because displayed values and roll percentages are integral"));
+                    return null;
+                }
+                minimum = maximum = (int)raw;
+                break;
+            case ">=": minimum = (int)Math.Ceiling(raw); break;
+            case ">": minimum = (int)Math.Floor(raw) + 1; break;
+            case "<=": maximum = (int)Math.Floor(raw); break;
+            default: maximum = (int)Math.Ceiling(raw) - 1; break;
         }
 
-        double value = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
-        int minimum = op == ">" ? (int)Math.Floor(value) + 1 : (int)Math.Ceiling(value);
         var condition = new LootFilter.StatCondition { Stat = StatAliases.Canonical(match.Groups[1].Value) };
-        if (match.Groups[4].Value.Length > 0) condition.MinRollPct = minimum;
-        else condition.MinValue = minimum;
+        if (match.Groups[4].Value.Length > 0)
+        {
+            condition.MinRollPct = minimum;
+            condition.MaxRollPct = maximum;
+        }
+        else
+        {
+            condition.MinValue = minimum;
+            condition.MaxValue = maximum;
+        }
         return condition;
     }
 

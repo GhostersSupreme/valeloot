@@ -34,7 +34,8 @@ const bool = (value: boolean | undefined): string => (value === undefined ? 'nul
 function rule(r: LootRule): string {
   const w = r.when ?? {};
   const stat = (s: NonNullable<typeof w.stats>[number]): string =>
-    `{"stat": ${str(s.stat)}, "minRollPct": ${num(s.minRollPct)}, "minValue": ${num(s.minValue)}}`;
+    `{"stat": ${str(s.stat)}, "minRollPct": ${num(s.minRollPct)}, "maxRollPct": ${num(s.maxRollPct)}, ` +
+    `"minValue": ${num(s.minValue)}, "maxValue": ${num(s.maxValue)}}`;
   const requiredStats = (w.requiredStats ?? []).map(stat);
   const stats = (w.stats ?? []).map(stat);
   const anyOfStats = (w.anyOfStats ?? [])

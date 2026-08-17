@@ -1928,10 +1928,9 @@ function candidates(context) {
     return vocab.items.filter((i) => hit(i.name)).slice(0, 80)
       .map((i) => ({ text: i.name, meta: i.type + (i.level ? ' · lv' + i.level : '') }));
   }
-  if (context.kind === 'statOperator' || context.kind === 'minimumOperator') {
-    return fixedCandidates(STAT_OPERATORS, hit);
-  }
+  if (context.kind === 'statOperator') return fixedCandidates(BOUND_OPERATORS, hit);
   if (context.kind === 'operator') return fixedCandidates(BOUND_OPERATORS, hit);
+  if (context.kind === 'minimumOperator') return fixedCandidates(STAT_OPERATORS, hit);
   if (context.kind === 'statValue') return fixedCandidates(STAT_VALUES, hit);
   if (context.kind === 'countValue') return fixedCandidates(COUNT_VALUES, hit);
   if (context.kind === 'percentValue') return fixedCandidates(PERCENT_VALUES, hit);

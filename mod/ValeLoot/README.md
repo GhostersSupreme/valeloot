@@ -319,6 +319,7 @@ All optional, and all must hold for the block to match.
 | `Type Artifact, Card, Gem, Consumable, Junk` | whole non-equipment kinds named by ValeLoot |
 | `Stat Agi >= 90%` | that substat line rolled in the top 10% of its range |
 | `Stat Agi >= 3` | that substat **prints** at least +3 on this item |
+| `Stat DamageFromMagic <= -3` | that substat prints -3 or lower, for detrimental-stat severity |
 | `AnyStat` | one `Stat` line is enough (default: every `Stat` line must match) |
 | `TopRolls >= 3` | at least three lines print their legal maximum; over-rolls count |
 | `HighRolls >= 3` | at least three hidden raw rolls reach `Threshold` |
@@ -328,6 +329,9 @@ All optional, and all must hold for the block to match.
 | `OverRoll` / `NoOverRoll` | has a line that rolled past 100% — the chaos over-roll |
 | `Chaos` / `NoChaos` | has a chaos type, or has not |
 | `Favorite` / `NotFavorite` | the game's own favourite flag |
+
+`Stat`, `RequireStat`, and `Stat` lines inside `AnyOf` accept `>=`, `>`, `=`, `<`, and `<=` for both
+printed values and `%` roll quality. Values are integral: `< -2` is equivalent to `<= -3`.
 
 `Stat` also accepts player-facing names. Internal names remain valid and canonical:
 

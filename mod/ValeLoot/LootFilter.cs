@@ -165,20 +165,20 @@ internal static class LootFilter
     }
 
     /**
-     * One required substat line, in one of its two forms: `Stat Agi >= 90%` or `Stat Agi >= 3`.
+     * One substat condition in either form: `Stat Agi >= 90%` or `Stat Agi >= 3`.
      *
-     * The `%` form is a floor on ROLL QUALITY, which the item carries. The bare form is a floor on
-     * the VALUE THE GAME PRINTS, which needs the item's base cap out of the catalog. They are two
-     * fields rather than one number and a flag on purpose: they are different questions, the parser
-     * sets exactly one of them per line, and nothing downstream can mix them up by accident.
+     * The `%` form bounds ROLL QUALITY, which the item carries. The bare form bounds the VALUE THE
+     * GAME PRINTS, which needs the item's base cap out of the catalog. Separate fields make the two
+     * questions impossible to mix accidentally. Bounds are inclusive after parsing normalizes strict
+     * integer comparisons (`> 2` becomes `>= 3`; `< -2` becomes `<= -3`).
      */
     internal sealed class StatCondition
     {
         public string Stat = "";
-        /// <summary>Roll-quality floor in percent — the `%` form. Null when the line did not ask.</summary>
         public int? MinRollPct;
-        /// <summary>Printed-value floor — the bare form. Null when the line did not ask.</summary>
+        public int? MaxRollPct;
         public int? MinValue;
+        public int? MaxValue;
     }
 
     /// <summary>What a rule tests. Every field absent means "any item", which only a Show block may mean.</summary>
@@ -509,15 +509,17 @@ internal static class LootFilter
         for (int i = 0; i < item.StatCount; i++)
         {
             if (!string.Equals(item.StatNames[i], wantedName, StringComparison.OrdinalIgnoreCase)) continue;
-            if (want.MinRollPct is int minRoll && item.StatRolls[i] < minRoll) continue;
-            if (want.MinValue is int minValue)
+            int roll = item.StatRolls[i];
+            if (want.MinRollPct is int minRoll && roll < minRoll) continue;
+            if (want.MaxRollPct is int maxRoll && roll > maxRoll) continue;
+
+            if (want.MinValue is not null || want.MaxValue is not null)
             {
-                // An unanswerable condition is NOT a match. `TryScaledValue` returns false when the
-                // catalog has not resolved, when the item is not one it knows, or when the stat is
-                // not in that item's pool — and treating any of those as satisfied would widen the
-                // block to the whole bag. It says so in the log once, and declines here.
-                if (!ItemCatalog.TryScaledValue(item.Id, item.StatTypes[i], item.StatRolls[i], out int printed)) continue;
-                if (printed < minValue) continue;
+                // An unanswerable condition is NOT a match. Treating a missing catalog value as
+                // satisfied would widen the block to the whole bag.
+                if (!ItemCatalog.TryScaledValue(item.Id, item.StatTypes[i], roll, out int printed)) continue;
+                if (want.MinValue is int minValue && printed < minValue) continue;
+                if (want.MaxValue is int maxValue && printed > maxValue) continue;
             }
             return true;
         }

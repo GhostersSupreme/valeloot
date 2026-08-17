@@ -1,0 +1,21 @@
+# Upper stat bounds make detrimental printed values directly expressible.
+Show "negative printed ceiling"
+    Stat DamageFromMagic <= -3
+    Color #ef6f6f
+
+# Strict integral bounds normalize to the next lower value in both parsers.
+Show "strict required ceiling"
+    RequireStat DamageFromMagic < -2
+    Color #f97316
+
+# Equality supplies both inclusive bounds.
+Show "exact negative value"
+    Stat DamageFromPoison = -5
+    Color #facc15
+
+# AnyOf children share the same comparator grammar, including raw roll percentages.
+Show "negative alternatives"
+    AnyOf
+        Stat DamageFromMagic <= -3
+        Stat DamageFromMelee <= 50%
+    Color #a86cff
