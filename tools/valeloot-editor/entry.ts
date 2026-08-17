@@ -12,6 +12,7 @@
  * `<script>` on a `file://` page with no import machinery. The page reaches it through the global.
  */
 import { completionContextAt, editIndent } from './autocomplete.ts';
+import { formatPrintedValue } from './display.ts';
 import { formatLootFilter, parseLootFilter } from '../../src/filter/loot-dsl.ts';
 import {
   BUILTIN_LOOT_SOUNDS, LOOT_HIGHLIGHTS, STAT_ALIASES, explainCondition, matchLoot,
@@ -30,4 +31,5 @@ import {
   STAT_ALIASES,
   completionContextAt,
   editIndent,
+  formatPrintedValue,
 };

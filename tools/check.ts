@@ -44,7 +44,7 @@ const steps: readonly Step[] = [
   },
   {
     name: 'editor and filter behavior',
-    argv: ['bun', 'test', 'tools/valeloot-editor/autocomplete.test.ts', 'tools/conformance/backgrounds.test.ts', 'tools/conformance/statmatches.test.ts', 'tools/conformance/roll-semantics.test.ts', 'tools/conformance/stat-aliases.test.ts'],
+    argv: ['bun', 'test', 'tools/valeloot-editor/autocomplete.test.ts', 'tools/valeloot-editor/display.test.ts', 'tools/conformance/backgrounds.test.ts', 'tools/conformance/statmatches.test.ts', 'tools/conformance/roll-semantics.test.ts', 'tools/conformance/stat-aliases.test.ts'],
     meaning: 'an editor autocomplete, filter parser, or evaluator contract is broken',
   },
   {

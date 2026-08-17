@@ -1377,7 +1377,7 @@ function renderTally() {
 function statLine(item) {
   return item.lines.map((l) => {
     const roll = l.rollPct === null ? '' : (l.rollPct > 100 ? '<u>' + l.rollPct + '%</u>' : l.rollPct + '%');
-    const printed = l.printed === null ? '<s>?</s>' : '+' + l.printed;
+    const printed = VL.formatPrintedValue(l.printed);
     return esc(l.stat) + ' ' + printed + (roll ? ' ' + roll : '');
   }).join('  ');
 }
@@ -3041,7 +3041,7 @@ function showNote(event, item) {
     + ' · ' + item.highRolls + ' high roll' + (item.highRolls === 1 ? '' : 's')
     + ' <span class="rollhi">(at ' + (plan ? plan.threshold : 90) + '%)</span></div>';
   html += '<div class="st">' + (item.lines.length
-    ? item.lines.map((l) => esc(l.stat) + ' ' + (l.printed === null ? '<s>?</s>' : '+' + l.printed)
+    ? item.lines.map((l) => esc(l.stat) + ' ' + VL.formatPrintedValue(l.printed)
       + (l.rollPct === null ? '' : (l.rollPct > 100 ? ' <u>' + l.rollPct + '% over</u>' : ' ' + l.rollPct + '%'))).join('<br>')
     : '<em>no substat lines</em>') + '</div>';
   box.innerHTML = html;

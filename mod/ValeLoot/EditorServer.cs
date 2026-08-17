@@ -1048,10 +1048,10 @@ internal static class EditorServer
     {
         public readonly string Stat;
         public readonly int Roll;
-        /// <summary>What the game prints, or -1 where the catalog could not say. Serialises as null.</summary>
-        public readonly int Printed;
+        /// <summary>What the game prints, or null where the catalog could not say.</summary>
+        public readonly int? Printed;
 
-        public BagLine(string stat, int roll, int printed)
+        public BagLine(string stat, int roll, int? printed)
         {
             Stat = stat;
             Roll = roll;
@@ -1142,8 +1142,8 @@ internal static class EditorServer
                     .Append(",\"printed\":");
                 // null, never 0: "the catalog could not say" must fail every value bound, and a 0
                 // would satisfy `Stat Agi >= 0` and read as a real measurement of a bad line.
-                if (line.Printed < 0) json.Append("null");
-                else json.Append(line.Printed.ToString(CultureInfo.InvariantCulture));
+                if (line.Printed is int printed) json.Append(printed.ToString(CultureInfo.InvariantCulture));
+                else json.Append("null");
                 json.Append('}');
             }
             json.Append("]}");
