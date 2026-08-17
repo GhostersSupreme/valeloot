@@ -245,6 +245,7 @@ public sealed class Plugin : BasePlugin
         EditorServer.Uninstall();
         BagFillIndicator.Uninstall();
         TooltipInject.Uninstall();
+        ValeLootInventoryCellApi.Uninstall();
         InventoryPaint.Uninstall();
         InventoryWatch.Uninstall();
         ItemReader.Uninstall();

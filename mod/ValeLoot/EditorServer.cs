@@ -1338,6 +1338,8 @@ internal static class EditorServer
             InventoryWatch.Tick(playerSave);
             BagFillIndicator.Tick(playerSave);
             InventoryPaint.Tick();
+            TooltipInject.Tick();
+            InventoryCellLabel.Tick();
 
             if (_getKeyDown is not null && _hotkeyCode >= 0 && _getKeyDown(_hotkeyCode, IntPtr.Zero) != 0)
             {

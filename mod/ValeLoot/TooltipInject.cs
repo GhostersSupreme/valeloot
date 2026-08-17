@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Il2CppInterop.Runtime;
 
 namespace ValeLoot;
@@ -36,6 +37,7 @@ internal static class TooltipInject
     private static volatile string? _pending;
     private static volatile int _pendingMinChars = MinTooltipChars;
     private static bool _writing;
+    private static int _refreshRequested;
 
     // SpiritVale can write several tooltip-like TMP bodies during a single hover. On the normal inventory
     // screen the observed order is consistently:
@@ -136,6 +138,7 @@ internal static class TooltipInject
         Detours.Undo(ref _enterDetour);
         Installed = false;
         _pending = null;
+        Interlocked.Exchange(ref _refreshRequested, 0);
         _capturingEnter = false;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
@@ -348,6 +351,18 @@ internal static class TooltipInject
     /// Rebuild the cooperative details for the latest inventory tooltip target and replace the body in-place.
     /// The target survives pointer-exit because SpiritVale can emit exit while the tooltip remains visible.
     /// </summary>
+    internal static bool RequestRefresh()
+    {
+        if (!Installed || !Enabled) return false;
+        Interlocked.Exchange(ref _refreshRequested, 1);
+        return true;
+    }
+
+    internal static void Tick()
+    {
+        if (Interlocked.Exchange(ref _refreshRequested, 0) != 0) RefreshCurrentExternal();
+    }
+
     internal static bool RefreshCurrentExternal()
     {
         if (!Installed || !Enabled || _writing || _currentHandler == IntPtr.Zero
@@ -416,7 +431,8 @@ public static class ValeLootTooltipApi
         }
     }
 
-    public static bool RefreshCurrent() => TooltipInject.RefreshCurrentExternal();
+    /// <summary>Queues a main-thread refresh. True means the request was accepted, not that a tooltip was visible.</summary>
+    public static bool RefreshCurrent() => TooltipInject.RequestRefresh();
 
     internal static string? BuildDetails(IntPtr itemData)
     {

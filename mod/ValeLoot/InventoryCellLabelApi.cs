@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Il2CppInterop.Runtime;
 
 namespace ValeLoot;
@@ -31,11 +32,18 @@ public static class ValeLootInventoryCellApi
         {
             if (ReferenceEquals(_provider, provider)) _provider = null;
         }
-        InventoryCellLabel.RefreshVisible();
+        Refresh();
     }
 
-    public static bool Refresh() => InventoryCellLabel.RefreshVisible();
+    /// <summary>Queues a main-thread refresh. True means the request was accepted, not that a cell was visible.</summary>
+    public static bool Refresh() => InventoryCellLabel.RequestRefresh();
     public static string Status() => InventoryCellLabel.Status;
+
+    internal static void Uninstall()
+    {
+        lock (Gate) _provider = null;
+        InventoryCellLabel.Uninstall();
+    }
 
     internal static string? BuildLabel(IntPtr cell)
     {
@@ -54,6 +62,8 @@ internal static class InventoryCellLabel
     private delegate void Draw1Fn(IntPtr self, IntPtr arg0, IntPtr methodInfo);
     private delegate void Draw2Fn(IntPtr self, IntPtr arg0, IntPtr arg1, IntPtr methodInfo);
     private delegate void Draw3Fn(IntPtr self, IntPtr arg0, IntPtr arg1, IntPtr arg2, IntPtr methodInfo);
+    private delegate void DrawPtrBoolFn(
+        IntPtr self, IntPtr arg0, [MarshalAs(UnmanagedType.I1)] bool arg1, IntPtr methodInfo);
     private delegate IntPtr PtrFn(IntPtr self, IntPtr methodInfo);
     private delegate int IntFn(IntPtr self, IntPtr methodInfo);
     private delegate bool BoolFn(IntPtr self, IntPtr methodInfo);
@@ -90,8 +100,9 @@ internal static class InventoryCellLabel
     private static BoolFn? _getActiveSelf;
     private static BoolSetFn? _setActive;
     private static IntPtr _tmpType;
-    private static bool _installed;
+    private static volatile bool _installed;
     private static bool _installAttempted;
+    private static int _refreshRequested;
     private static bool _reportedFirstLabel;
     private static int _errors;
 
@@ -146,8 +157,8 @@ internal static class InventoryCellLabel
         foreach (Il2CppMeta.MethodInfo draw in Il2CppMeta.Methods(cellClass))
         {
             if (draw.Name != "Draw" || draw.NativePtr == IntPtr.Zero || !seenBodies.Add(draw.NativePtr)) continue;
-            if (!PointerAbiOnly(draw.ParamTypeNames)) continue;
-
+            bool pointerBool = PointerAndBoolAbi(draw.ParamTypeNames);
+            if (!pointerBool && !PointerAbiOnly(draw.ParamTypeNames)) continue;
             try
             {
                 int index = Originals.Count;
@@ -169,10 +180,21 @@ internal static class InventoryCellLabel
                     }
                     case 2:
                     {
-                        Draw2Fn hook = (self, a0, a1, mi) => Draw2(index, self, a0, a1, mi);
-                        Hooks.Add(hook); Originals.Add(null);
-                        DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw2Fn? original));
-                        Originals[index] = original; hooked++; break;
+                        if (pointerBool)
+                        {
+                            DrawPtrBoolFn hook = (self, a0, a1, mi) => DrawPtrBool(index, self, a0, a1, mi);
+                            Hooks.Add(hook); Originals.Add(null);
+                            DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out DrawPtrBoolFn? original));
+                            Originals[index] = original; hooked++;
+                        }
+                        else
+                        {
+                            Draw2Fn hook = (self, a0, a1, mi) => Draw2(index, self, a0, a1, mi);
+                            Hooks.Add(hook); Originals.Add(null);
+                            DetourHandles.Add(ApplyDetour(draw.NativePtr, hook, out Draw2Fn? original));
+                            Originals[index] = original; hooked++;
+                        }
+                        break;
                     }
                     case 3:
                     {
@@ -189,8 +211,9 @@ internal static class InventoryCellLabel
         _installed = hooked > 0;
         Status = _installed
             ? $"ready: {hooked} UIInventoryItem.Draw body/bodies; bottom-right Count label; "
-              + "all recently drawn tabs eligible; inline count + market price; inactive equipment Count objects enabled only while priced"
-            : "inventory-cell label unavailable: no pointer-safe UIInventoryItem.Draw overload resolved";
+              + "pointer and pointer+bool overloads; all recently drawn tabs eligible; "
+              + "inline count + market price; inactive equipment Count objects enabled only while priced"
+            : "inventory-cell label unavailable: no supported UIInventoryItem.Draw overload resolved";
         return _installed;
     }
 
@@ -201,16 +224,18 @@ internal static class InventoryCellLabel
     {
         foreach (string type in types)
         {
-            switch (type)
-            {
-                case "System.Boolean": case "System.Byte": case "System.SByte":
-                case "System.Int16": case "System.UInt16": case "System.Int32": case "System.UInt32":
-                case "System.Int64": case "System.UInt64": case "System.Single": case "System.Double":
-                    return false;
-            }
+            if (!PointerAbi(type)) return false;
         }
         return true;
     }
+
+    private static bool PointerAndBoolAbi(string[] types)
+        => types.Length == 2 && PointerAbi(types[0]) && types[1] == "System.Boolean";
+
+    private static bool PointerAbi(string type)
+        => type is not ("System.Boolean" or "System.Byte" or "System.SByte"
+            or "System.Int16" or "System.UInt16" or "System.Int32" or "System.UInt32"
+            or "System.Int64" or "System.UInt64" or "System.Single" or "System.Double");
 
     private static void Draw0(int i, IntPtr self, IntPtr mi)
     {
@@ -227,6 +252,10 @@ internal static class InventoryCellLabel
     private static void Draw3(int i, IntPtr self, IntPtr a0, IntPtr a1, IntPtr a2, IntPtr mi)
     {
         RestoreBeforeDraw(self); (Originals[i] as Draw3Fn)?.Invoke(self, a0, a1, a2, mi); Touch(self);
+    }
+    private static void DrawPtrBool(int i, IntPtr self, IntPtr arg0, bool arg1, IntPtr mi)
+    {
+        RestoreBeforeDraw(self); (Originals[i] as DrawPtrBoolFn)?.Invoke(self, arg0, arg1, mi); Touch(self);
     }
 
     private static void RestoreBeforeDraw(IntPtr cell)
@@ -254,7 +283,19 @@ internal static class InventoryCellLabel
         Apply(cell);
     }
 
-    public static bool RefreshVisible()
+    internal static bool RequestRefresh()
+    {
+        if (!_installed) return false;
+        Interlocked.Exchange(ref _refreshRequested, 1);
+        return true;
+    }
+
+    internal static void Tick()
+    {
+        if (Interlocked.Exchange(ref _refreshRequested, 0) != 0) RefreshVisible();
+    }
+
+    private static bool RefreshVisible()
     {
         if (!_installed || _latestDrawUtc == default) return false;
         DateTime currentPageCutoff = _latestDrawUtc - CurrentPageBurstWindow;
@@ -319,7 +360,7 @@ internal static class InventoryCellLabel
             bool shouldForceActive = !string.IsNullOrWhiteSpace(label);
             if (shouldForceActive)
             {
-                string price = $"{Marker}<size=72%><b>{label!.Trim()}</b></color></size>";
+                string price = $"{Marker}<size=72%><b>{label!.Trim()}</b></size></color>";
                 // The Count TMP rect is only one line high on these cells. A second line is clipped. Keep the
                 // game's quantity and the compact market price on the same bottom-right line instead.
                 desired = string.IsNullOrWhiteSpace(baseText) ? price : baseText + "  " + price;
@@ -339,6 +380,51 @@ internal static class InventoryCellLabel
             }
         }
         catch { _errors++; }
+    }
+
+    public static void Uninstall()
+    {
+        Sweep.Clear();
+        foreach (IntPtr cell in BaseCountByCell.Keys) Sweep.Add(cell);
+        foreach (IntPtr cell in BaseActiveByCell.Keys)
+        {
+            if (!BaseCountByCell.ContainsKey(cell)) Sweep.Add(cell);
+        }
+        foreach (IntPtr cell in Sweep) RestoreBeforeDraw(cell);
+
+        for (int i = 0; i < DetourHandles.Count; i++)
+        {
+            object? handle = DetourHandles[i];
+            Detours.Undo(ref handle);
+        }
+
+        DetourHandles.Clear();
+        Hooks.Clear();
+        Originals.Clear();
+        RecentlyDrawn.Clear();
+        CountTextByCell.Clear();
+        CountObjectByCell.Clear();
+        BaseCountByCell.Clear();
+        BaseActiveByCell.Clear();
+        Sweep.Clear();
+
+        _getTransform = null;
+        _getChildCount = null;
+        _getChild = null;
+        _getName = null;
+        _getComponent = null;
+        _getGameObject = null;
+        _getText = null;
+        _setText = null;
+        _getActiveSelf = null;
+        _setActive = null;
+        _tmpType = IntPtr.Zero;
+        _installed = false;
+        _installAttempted = false;
+        _reportedFirstLabel = false;
+        _latestDrawUtc = default;
+        Interlocked.Exchange(ref _refreshRequested, 0);
+        Status = "not installed";
     }
 
     private static IntPtr ResolveCountText(IntPtr cell)
