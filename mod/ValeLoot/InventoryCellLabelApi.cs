@@ -74,9 +74,9 @@ internal static class InventoryCellLabel
     private static readonly Dictionary<IntPtr, bool> BaseActiveByCell = new();
     private static readonly List<IntPtr> Sweep = new();
 
-    // A page/tab redraw emits a tight burst of UIInventoryItem.Draw calls. The latest burst remains the
-    // active page until another burst replaces it; it does not expire merely because an AH response takes
-    // longer than the burst duration.
+    // A page/tab redraw emits a tight burst of UIInventoryItem.Draw calls. Only cells whose GameObjects are
+    // actually active in the hierarchy participate. SpiritVale also redraws cells belonging to hidden tabs;
+    // allowing those cells into the queue made background market lookups spend time on unrelated items.
     private static DateTime _latestDrawUtc;
     private static readonly TimeSpan CurrentPageBurstWindow = TimeSpan.FromMilliseconds(750);
 
@@ -89,6 +89,7 @@ internal static class InventoryCellLabel
     private static PtrFn? _getText;
     private static SetTextFn? _setText;
     private static BoolFn? _getActiveSelf;
+    private static BoolFn? _getActiveInHierarchy;
     private static BoolSetFn? _setActive;
     private static IntPtr _tmpType;
     private static bool _installed;
@@ -120,11 +121,13 @@ internal static class InventoryCellLabel
         Il2CppMeta.MethodInfo? getText = Il2CppMeta.FindOverload(tmp, "get_text");
         Il2CppMeta.MethodInfo? setText = Il2CppMeta.FindOverload(tmp, "set_text", "System.String");
         Il2CppMeta.MethodInfo? getActiveSelf = Il2CppMeta.FindOverload(gameObject, "get_activeSelf");
+        Il2CppMeta.MethodInfo? getActiveInHierarchy = Il2CppMeta.FindOverload(gameObject, "get_activeInHierarchy");
         Il2CppMeta.MethodInfo? setActive = Il2CppMeta.FindOverload(gameObject, "SetActive", "System.Boolean");
 
         if (cellClass == IntPtr.Zero || tmp == IntPtr.Zero || getTransform is null || getGameObject is null
             || getChildCount is null || getChild is null || getName is null || getComponent is null
-            || getText is null || setText is null || getActiveSelf is null || setActive is null)
+            || getText is null || setText is null || getActiveSelf is null || getActiveInHierarchy is null
+            || setActive is null)
         {
             Status = "inventory-cell label unavailable: UI/TMP/GameObject accessors did not resolve";
             return false;
@@ -139,6 +142,7 @@ internal static class InventoryCellLabel
         _getText = Marshal.GetDelegateForFunctionPointer<PtrFn>(getText.NativePtr);
         _setText = Marshal.GetDelegateForFunctionPointer<SetTextFn>(setText.NativePtr);
         _getActiveSelf = Marshal.GetDelegateForFunctionPointer<BoolFn>(getActiveSelf.NativePtr);
+        _getActiveInHierarchy = Marshal.GetDelegateForFunctionPointer<BoolFn>(getActiveInHierarchy.NativePtr);
         _setActive = Marshal.GetDelegateForFunctionPointer<BoolSetFn>(setActive.NativePtr);
         _tmpType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(tmp));
 
@@ -190,7 +194,7 @@ internal static class InventoryCellLabel
         _installed = hooked > 0;
         Status = _installed
             ? $"ready: {hooked} UIInventoryItem.Draw body/bodies; bottom-right Count label; "
-              + "inactive equipment Count objects enabled only while priced; latest-page burst targeting"
+              + "active-in-hierarchy current-page targeting; inactive equipment Count objects enabled only while priced"
             : "inventory-cell label unavailable: no pointer-safe UIInventoryItem.Draw overload resolved";
         return _installed;
     }
@@ -250,11 +254,22 @@ internal static class InventoryCellLabel
 
     private static void Touch(IntPtr cell)
     {
-        if (cell == IntPtr.Zero) return;
+        if (cell == IntPtr.Zero || !IsCellVisible(cell)) return;
         DateTime now = DateTime.UtcNow;
         RecentlyDrawn[cell] = now;
         _latestDrawUtc = now;
         Apply(cell);
+    }
+
+    private static bool IsCellVisible(IntPtr cell)
+    {
+        if (cell == IntPtr.Zero || _getGameObject is null || _getActiveInHierarchy is null) return false;
+        try
+        {
+            IntPtr go = _getGameObject(cell, IntPtr.Zero);
+            return go != IntPtr.Zero && _getActiveInHierarchy(go, IntPtr.Zero);
+        }
+        catch { return false; }
     }
 
     public static bool RefreshVisible()
@@ -268,7 +283,7 @@ internal static class InventoryCellLabel
         foreach ((IntPtr cell, DateTime last) in RecentlyDrawn)
         {
             if (last < garbageCutoff) { Sweep.Add(cell); continue; }
-            if (last < currentPageCutoff) continue;
+            if (last < currentPageCutoff || !IsCellVisible(cell)) continue;
             Apply(cell);
             any = true;
         }
@@ -286,7 +301,8 @@ internal static class InventoryCellLabel
 
     private static void Apply(IntPtr cell)
     {
-        if (_setText is null || _getText is null || _getActiveSelf is null || _setActive is null) return;
+        if (_setText is null || _getText is null || _getActiveSelf is null || _setActive is null
+            || !IsCellVisible(cell)) return;
         try
         {
             IntPtr text = ResolveCountText(cell);
@@ -307,8 +323,6 @@ internal static class InventoryCellLabel
                 BaseCountByCell[cell] = baseText;
             }
 
-            // If our marker is already present, currentActive may be the forced true state. Otherwise this
-            // call follows the game's Draw and is authoritative for whether Count should normally be active.
             bool baseActive;
             if (current.Contains(Marker, StringComparison.Ordinal)
                 && BaseActiveByCell.TryGetValue(cell, out bool rememberedActive))
