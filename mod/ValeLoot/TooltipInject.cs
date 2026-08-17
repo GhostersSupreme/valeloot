@@ -37,15 +37,18 @@ internal static class TooltipInject
     private static volatile int _pendingMinChars = MinTooltipChars;
     private static bool _writing;
 
-    // Pointer-enter capture state. SpiritVale can write several unrelated TMP_Text objects during one hover.
-    // Do not hard-filter by content: the visible item tooltip is assembled from several TMP objects and the
-    // body text does not consistently contain labels such as Weight:. We restore the proven longest-write
-    // behavior and trace the first few hover candidates so the final target can be identified from evidence.
+    // SpiritVale can write several tooltip-like TMP bodies during a single hover. On the normal inventory
+    // screen the observed order is consistently:
+    //   hovered description -> hovered FULL body -> comparison description -> comparison FULL body.
+    // Therefore the first structured/full body is the hovered item; "longest wins" incorrectly picks the
+    // comparison item whenever it is more verbose. For simple items with no structural markers, retain a
+    // longest-text fallback.
     private static bool _capturingEnter;
     private static IntPtr _candidateText;
     private static string? _candidateBaseText;
+    private static bool _candidateStructured;
     private static readonly List<string> _candidateTrace = new();
-    private static int _traceHoversRemaining = 10;
+    private static int _traceHoversRemaining = 6;
     private static bool _traceThisHover;
     private static int _traceHoverNumber;
 
@@ -115,8 +118,8 @@ internal static class TooltipInject
 
             Installed = true;
             log($"tooltip inject ready (OnPointerEnter + TMP_Text.set_text; Data 0x{_dataFieldOffset:x}, "
-              + $"floors {MinTooltipChars}/{MinExternalTooltipChars} chars, longest-write targeting restored, "
-              + "candidate tracing enabled, async refresh retains last valid target across pointer-exit)");
+              + $"floors {MinTooltipChars}/{MinExternalTooltipChars} chars, first-structured-body targeting, "
+              + "async refresh retains last valid target across pointer-exit)");
         }
         catch (Exception e)
         {
@@ -136,6 +139,7 @@ internal static class TooltipInject
         _capturingEnter = false;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
+        _candidateStructured = false;
         _candidateTrace.Clear();
         _currentHandler = IntPtr.Zero;
         _currentText = IntPtr.Zero;
@@ -149,6 +153,7 @@ internal static class TooltipInject
         _currentBaseText = null;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
+        _candidateStructured = false;
         _refreshMissReported = false;
 
         _traceThisHover = _traceHoversRemaining > 0;
@@ -178,7 +183,8 @@ internal static class TooltipInject
         {
             string selected = _candidateBaseText is null ? "none" : DescribeText(_candidateBaseText);
             string candidates = _candidateTrace.Count == 0 ? "<none>" : string.Join(" || ", _candidateTrace);
-            _log?.Invoke($"tooltip candidate trace #{_traceHoverNumber}: capture candidates={candidates}; selected={selected}");
+            _log?.Invoke($"tooltip candidate trace #{_traceHoverNumber}: capture candidates={candidates}; "
+                       + $"selected structured={_candidateStructured}: {selected}");
             _traceHoversRemaining--;
             _traceThisHover = false;
         }
@@ -257,11 +263,24 @@ internal static class TooltipInject
         if (_capturingEnter)
         {
             _setTextOriginal?.Invoke(self, value, methodInfo);
+            bool structured = IsStructuredBody(incoming);
             if (_traceThisHover && _candidateTrace.Count < 12)
-                _candidateTrace.Add(DescribeText(incoming));
+                _candidateTrace.Add($"structured={structured}, {DescribeText(incoming)}");
 
-            if (_candidateBaseText is null || incoming.Length > _candidateBaseText.Length)
+            if (structured)
             {
+                // First structured body is the hovered item. Never replace it with the later comparison body.
+                if (!_candidateStructured)
+                {
+                    _candidateText = self;
+                    _candidateBaseText = incoming;
+                    _candidateStructured = true;
+                }
+            }
+            else if (!_candidateStructured
+                     && (_candidateBaseText is null || incoming.Length > _candidateBaseText.Length))
+            {
+                // Simple card/material/consumable fallback when no structured body is produced.
                 _candidateText = self;
                 _candidateBaseText = incoming;
             }
@@ -269,18 +288,26 @@ internal static class TooltipInject
         }
 
         // Compatibility fallback for a client that performs the tooltip write after OnPointerEnter returns.
-        if (_traceHoversRemaining > 0)
-            _log?.Invoke("tooltip candidate trace post-enter fallback: " + DescribeText(incoming));
         CommitDirect(self, incoming, pending, methodInfo);
+    }
+
+    private static bool IsStructuredBody(string text)
+    {
+        return text.Contains("Cards:", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Gems:", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("------------------------------------------------", StringComparison.Ordinal)
+            || text.Contains("Stances:", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("[Potential]", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("[Requires]", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string DescribeText(string text)
     {
         string flat = text.Replace('\r', ' ').Replace('\n', ' ');
         if (flat.Length > 180) flat = flat[..180] + "…";
-        return $"len={text.Length}, weight={text.Contains("Weight:", StringComparison.OrdinalIgnoreCase)}, "
-             + $"cards={text.Contains("Cards:", StringComparison.OrdinalIgnoreCase)}, "
-             + $"gems={text.Contains("Gems:", StringComparison.OrdinalIgnoreCase)}, text='{flat}'";
+        return $"len={text.Length}, cards={text.Contains("Cards:", StringComparison.OrdinalIgnoreCase)}, "
+             + $"gems={text.Contains("Gems:", StringComparison.OrdinalIgnoreCase)}, "
+             + $"sep={text.Contains("------------------------------------------------", StringComparison.Ordinal)}, text='{flat}'";
     }
 
     private static void CommitCandidate()
@@ -293,6 +320,7 @@ internal static class TooltipInject
         string baseText = _candidateBaseText;
         _candidateText = IntPtr.Zero;
         _candidateBaseText = null;
+        _candidateStructured = false;
         CommitDirect(text, baseText, pending, IntPtr.Zero);
     }
 
