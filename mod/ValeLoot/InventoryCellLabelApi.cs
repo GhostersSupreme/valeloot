@@ -56,6 +56,8 @@ internal static class InventoryCellLabel
     private delegate void Draw3Fn(IntPtr self, IntPtr arg0, IntPtr arg1, IntPtr arg2, IntPtr methodInfo);
     private delegate IntPtr PtrFn(IntPtr self, IntPtr methodInfo);
     private delegate int IntFn(IntPtr self, IntPtr methodInfo);
+    private delegate bool BoolFn(IntPtr self, IntPtr methodInfo);
+    private delegate void BoolSetFn(IntPtr self, bool value, IntPtr methodInfo);
     private delegate IntPtr ChildFn(IntPtr self, int index, IntPtr methodInfo);
     private delegate IntPtr GetComponentFn(IntPtr self, IntPtr type, IntPtr methodInfo);
     private delegate void SetTextFn(IntPtr self, IntPtr value, IntPtr methodInfo);
@@ -67,12 +69,14 @@ internal static class InventoryCellLabel
     private static readonly List<Delegate?> Originals = new();
     private static readonly Dictionary<IntPtr, DateTime> RecentlyDrawn = new();
     private static readonly Dictionary<IntPtr, IntPtr> CountTextByCell = new();
+    private static readonly Dictionary<IntPtr, IntPtr> CountObjectByCell = new();
     private static readonly Dictionary<IntPtr, string> BaseCountByCell = new();
+    private static readonly Dictionary<IntPtr, bool> BaseActiveByCell = new();
     private static readonly List<IntPtr> Sweep = new();
 
-    // A page/tab redraw emits a tight burst of UIInventoryItem.Draw calls. Remember the newest draw time and
-    // refresh only cells belonging to that burst. This prevents a tab opened seconds ago from remaining in
-    // the progressive market-price queue merely because its pooled cells are still alive.
+    // A page/tab redraw emits a tight burst of UIInventoryItem.Draw calls. The latest burst remains the
+    // active page until another burst replaces it; it does not expire merely because an AH response takes
+    // longer than the burst duration.
     private static DateTime _latestDrawUtc;
     private static readonly TimeSpan CurrentPageBurstWindow = TimeSpan.FromMilliseconds(750);
 
@@ -81,8 +85,11 @@ internal static class InventoryCellLabel
     private static ChildFn? _getChild;
     private static PtrFn? _getName;
     private static GetComponentFn? _getComponent;
+    private static PtrFn? _getGameObject;
     private static PtrFn? _getText;
     private static SetTextFn? _setText;
+    private static BoolFn? _getActiveSelf;
+    private static BoolSetFn? _setActive;
     private static IntPtr _tmpType;
     private static bool _installed;
     private static bool _installAttempted;
@@ -100,31 +107,39 @@ internal static class InventoryCellLabel
         IntPtr cellClass = Il2CppMeta.FindClass("", "UIInventoryItem", GameAssemblies);
         IntPtr component = Il2CppMeta.FindClass("UnityEngine", "Component", "UnityEngine.CoreModule.dll");
         IntPtr transform = Il2CppMeta.FindClass("UnityEngine", "Transform", "UnityEngine.CoreModule.dll");
+        IntPtr gameObject = Il2CppMeta.FindClass("UnityEngine", "GameObject", "UnityEngine.CoreModule.dll");
         IntPtr unityObject = Il2CppMeta.FindClass("UnityEngine", "Object", "UnityEngine.CoreModule.dll");
         IntPtr tmp = Il2CppMeta.FindClass("TMPro", "TMP_Text", "Unity.TextMeshPro.dll", "TextMeshPro.dll");
 
         Il2CppMeta.MethodInfo? getTransform = Il2CppMeta.FindOverload(component, "get_transform");
+        Il2CppMeta.MethodInfo? getGameObject = Il2CppMeta.FindOverload(component, "get_gameObject");
         Il2CppMeta.MethodInfo? getChildCount = Il2CppMeta.FindOverload(transform, "get_childCount");
         Il2CppMeta.MethodInfo? getChild = Il2CppMeta.FindOverload(transform, "GetChild", "System.Int32");
         Il2CppMeta.MethodInfo? getName = Il2CppMeta.FindOverload(unityObject, "get_name");
         Il2CppMeta.MethodInfo? getComponent = Il2CppMeta.FindOverload(component, "GetComponent", "System.Type");
         Il2CppMeta.MethodInfo? getText = Il2CppMeta.FindOverload(tmp, "get_text");
         Il2CppMeta.MethodInfo? setText = Il2CppMeta.FindOverload(tmp, "set_text", "System.String");
+        Il2CppMeta.MethodInfo? getActiveSelf = Il2CppMeta.FindOverload(gameObject, "get_activeSelf");
+        Il2CppMeta.MethodInfo? setActive = Il2CppMeta.FindOverload(gameObject, "SetActive", "System.Boolean");
 
-        if (cellClass == IntPtr.Zero || tmp == IntPtr.Zero || getTransform is null || getChildCount is null
-            || getChild is null || getName is null || getComponent is null || getText is null || setText is null)
+        if (cellClass == IntPtr.Zero || tmp == IntPtr.Zero || getTransform is null || getGameObject is null
+            || getChildCount is null || getChild is null || getName is null || getComponent is null
+            || getText is null || setText is null || getActiveSelf is null || setActive is null)
         {
-            Status = "inventory-cell label unavailable: UI/TMP accessors did not resolve";
+            Status = "inventory-cell label unavailable: UI/TMP/GameObject accessors did not resolve";
             return false;
         }
 
         _getTransform = Marshal.GetDelegateForFunctionPointer<PtrFn>(getTransform.NativePtr);
+        _getGameObject = Marshal.GetDelegateForFunctionPointer<PtrFn>(getGameObject.NativePtr);
         _getChildCount = Marshal.GetDelegateForFunctionPointer<IntFn>(getChildCount.NativePtr);
         _getChild = Marshal.GetDelegateForFunctionPointer<ChildFn>(getChild.NativePtr);
         _getName = Marshal.GetDelegateForFunctionPointer<PtrFn>(getName.NativePtr);
         _getComponent = Marshal.GetDelegateForFunctionPointer<GetComponentFn>(getComponent.NativePtr);
         _getText = Marshal.GetDelegateForFunctionPointer<PtrFn>(getText.NativePtr);
         _setText = Marshal.GetDelegateForFunctionPointer<SetTextFn>(setText.NativePtr);
+        _getActiveSelf = Marshal.GetDelegateForFunctionPointer<BoolFn>(getActiveSelf.NativePtr);
+        _setActive = Marshal.GetDelegateForFunctionPointer<BoolSetFn>(setActive.NativePtr);
         _tmpType = IL2CPP.il2cpp_type_get_object(IL2CPP.il2cpp_class_get_type(tmp));
 
         var seenBodies = new HashSet<IntPtr>();
@@ -174,7 +189,8 @@ internal static class InventoryCellLabel
 
         _installed = hooked > 0;
         Status = _installed
-            ? $"ready: {hooked} UIInventoryItem.Draw body/bodies; bottom-right Count label; latest-page burst targeting"
+            ? $"ready: {hooked} UIInventoryItem.Draw body/bodies; bottom-right Count label; "
+              + "inactive equipment Count objects enabled only while priced; latest-page burst targeting"
             : "inventory-cell label unavailable: no pointer-safe UIInventoryItem.Draw overload resolved";
         return _installed;
     }
@@ -197,10 +213,40 @@ internal static class InventoryCellLabel
         return true;
     }
 
-    private static void Draw0(int i, IntPtr self, IntPtr mi) { (Originals[i] as Draw0Fn)?.Invoke(self, mi); Touch(self); }
-    private static void Draw1(int i, IntPtr self, IntPtr a0, IntPtr mi) { (Originals[i] as Draw1Fn)?.Invoke(self, a0, mi); Touch(self); }
-    private static void Draw2(int i, IntPtr self, IntPtr a0, IntPtr a1, IntPtr mi) { (Originals[i] as Draw2Fn)?.Invoke(self, a0, a1, mi); Touch(self); }
-    private static void Draw3(int i, IntPtr self, IntPtr a0, IntPtr a1, IntPtr a2, IntPtr mi) { (Originals[i] as Draw3Fn)?.Invoke(self, a0, a1, a2, mi); Touch(self); }
+    // Restore our prior mutation BEFORE SpiritVale redraws a pooled cell. That gives the game the original
+    // Count active/text state to work from and prevents a price label from leaking onto the next bound item.
+    private static void Draw0(int i, IntPtr self, IntPtr mi)
+    {
+        RestoreBeforeDraw(self); (Originals[i] as Draw0Fn)?.Invoke(self, mi); Touch(self);
+    }
+    private static void Draw1(int i, IntPtr self, IntPtr a0, IntPtr mi)
+    {
+        RestoreBeforeDraw(self); (Originals[i] as Draw1Fn)?.Invoke(self, a0, mi); Touch(self);
+    }
+    private static void Draw2(int i, IntPtr self, IntPtr a0, IntPtr a1, IntPtr mi)
+    {
+        RestoreBeforeDraw(self); (Originals[i] as Draw2Fn)?.Invoke(self, a0, a1, mi); Touch(self);
+    }
+    private static void Draw3(int i, IntPtr self, IntPtr a0, IntPtr a1, IntPtr a2, IntPtr mi)
+    {
+        RestoreBeforeDraw(self); (Originals[i] as Draw3Fn)?.Invoke(self, a0, a1, a2, mi); Touch(self);
+    }
+
+    private static void RestoreBeforeDraw(IntPtr cell)
+    {
+        if (cell == IntPtr.Zero) return;
+        try
+        {
+            if (CountTextByCell.TryGetValue(cell, out IntPtr text) && text != IntPtr.Zero
+                && BaseCountByCell.TryGetValue(cell, out string? baseText) && _setText is not null)
+                _setText(text, IL2CPP.ManagedStringToIl2Cpp(baseText), IntPtr.Zero);
+
+            if (CountObjectByCell.TryGetValue(cell, out IntPtr go) && go != IntPtr.Zero
+                && BaseActiveByCell.TryGetValue(cell, out bool active) && _setActive is not null)
+                _setActive(go, active, IntPtr.Zero);
+        }
+        catch { _errors++; }
+    }
 
     private static void Touch(IntPtr cell)
     {
@@ -231,20 +277,26 @@ internal static class InventoryCellLabel
         {
             RecentlyDrawn.Remove(cell);
             CountTextByCell.Remove(cell);
+            CountObjectByCell.Remove(cell);
             BaseCountByCell.Remove(cell);
+            BaseActiveByCell.Remove(cell);
         }
         return any;
     }
 
     private static void Apply(IntPtr cell)
     {
-        if (_setText is null || _getText is null) return;
+        if (_setText is null || _getText is null || _getActiveSelf is null || _setActive is null) return;
         try
         {
             IntPtr text = ResolveCountText(cell);
             if (text == IntPtr.Zero) return;
+            IntPtr go = ResolveCountObject(cell, text);
+            if (go == IntPtr.Zero) return;
 
             string current = Il2CppMeta.ReadString(_getText(text, IntPtr.Zero)) ?? "";
+            bool currentActive = _getActiveSelf(go, IntPtr.Zero);
+
             string baseText;
             if (current.Contains(Marker, StringComparison.Ordinal)
                 && BaseCountByCell.TryGetValue(cell, out string? remembered))
@@ -255,21 +307,38 @@ internal static class InventoryCellLabel
                 BaseCountByCell[cell] = baseText;
             }
 
+            // If our marker is already present, currentActive may be the forced true state. Otherwise this
+            // call follows the game's Draw and is authoritative for whether Count should normally be active.
+            bool baseActive;
+            if (current.Contains(Marker, StringComparison.Ordinal)
+                && BaseActiveByCell.TryGetValue(cell, out bool rememberedActive))
+                baseActive = rememberedActive;
+            else
+            {
+                baseActive = currentActive;
+                BaseActiveByCell[cell] = baseActive;
+            }
+
             string? label = ValeLootInventoryCellApi.BuildLabel(cell);
             string desired = baseText;
-            if (!string.IsNullOrWhiteSpace(label))
+            bool shouldForceActive = !string.IsNullOrWhiteSpace(label);
+            if (shouldForceActive)
             {
-                string price = $"{Marker}<size=72%><b>{label.Trim()}</b></color></size>";
+                string price = $"{Marker}<size=72%><b>{label!.Trim()}</b></color></size>";
                 desired = string.IsNullOrWhiteSpace(baseText) ? price : baseText + "\n" + price;
             }
 
             if (!string.Equals(current, desired, StringComparison.Ordinal))
                 _setText(text, IL2CPP.ManagedStringToIl2Cpp(desired), IntPtr.Zero);
 
-            if (!_reportedFirstLabel && !string.IsNullOrWhiteSpace(label))
+            bool desiredActive = shouldForceActive || baseActive;
+            if (currentActive != desiredActive)
+                _setActive(go, desiredActive, IntPtr.Zero);
+
+            if (!_reportedFirstLabel && shouldForceActive)
             {
                 _reportedFirstLabel = true;
-                Status += "; first external label drawn";
+                Status += "; first external label drawn/activated";
             }
         }
         catch { _errors++; }
@@ -280,6 +349,15 @@ internal static class InventoryCellLabel
         if (CountTextByCell.TryGetValue(cell, out IntPtr cached) && cached != IntPtr.Zero) return cached;
         IntPtr found = FindCountText(cell, 0, 0);
         if (found != IntPtr.Zero) CountTextByCell[cell] = found;
+        return found;
+    }
+
+    private static IntPtr ResolveCountObject(IntPtr cell, IntPtr text)
+    {
+        if (CountObjectByCell.TryGetValue(cell, out IntPtr cached) && cached != IntPtr.Zero) return cached;
+        if (_getGameObject is null || text == IntPtr.Zero) return IntPtr.Zero;
+        IntPtr found = _getGameObject(text, IntPtr.Zero);
+        if (found != IntPtr.Zero) CountObjectByCell[cell] = found;
         return found;
     }
 
